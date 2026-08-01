@@ -1,0 +1,20 @@
+# Local development and secrets
+.env.local
+config/local/
+*.local
+*.key
+*.pem
+
+# Test/build output
+.build/
+build/
+dist/
+coverage/
+.tmp/
+*.log
+
+# Editors/OS
+.vscode/settings.json
+.idea/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,13 @@
+# Repeats: online -> short outage -> recovery
+ups.status: OL
+battery.charge: 100
+battery.runtime: 3600
+TIMER 5
+ups.status: OB DISCHRG
+battery.charge: 99
+battery.runtime: 3500
+TIMER 20
+ups.status: OL CHRG
+battery.charge: 99
+battery.runtime: 3500
+TIMER 15

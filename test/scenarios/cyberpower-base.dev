@@ -1,0 +1,20 @@
+# Synthetic CP1500-class NUT data for dummy-ups testing
+battery.charge: 100
+battery.charge.low: 10
+battery.charge.warning: 20
+battery.runtime: 3600
+battery.runtime.low: 300
+battery.type: PbAcid
+device.mfr: CPS
+device.model: CP1500PFCLCD
+device.type: ups
+input.voltage: 120.0
+input.voltage.nominal: 120
+ups.beeper.status: enabled
+ups.load: 8
+ups.mfr: CPS
+ups.model: CP1500PFCLCD
+ups.realpower.nominal: 900
+ups.status: OL
+ups.vendorid: 0764
+ups.productid: 0501
