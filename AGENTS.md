@@ -151,3 +151,17 @@ Do not invent answers for unresolved product decisions. Record them in `backlog.
 - UI placement and visual conventions
 - long-term update channel and signing model
 - whether central policy scheduling belongs in the MVP
+
+## Agent skills
+
+### Issue tracker
+
+Issues and PRDs are tracked in GitHub Issues for `darvilp/nutmerlin`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical triage roles use their default label names. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This is a single-context repository: use root `CONTEXT.md` and ADRs under `decisions/`. See `docs/agents/domain.md`.
