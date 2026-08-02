@@ -87,6 +87,8 @@ Platform eligibility uses the same local controller:
 
 Operation `platform.eligibility.v1` reports support classification separately from installation disposition. The version-controlled production qualification profile initially names no qualified firmware release; support claims remain absent until release evidence supplies exact versions. Native semantic probes that have not been qualified report `unknown`. Host simulations are explicitly labeled and cannot create production qualification evidence or authorize installation.
 
+Storage qualification uses `bin/nutmerlin storage-preflight [--json] TRANSACTION_BYTES TEMPORARY_BYTES`. The package or release planner supplies the two closed, non-negative byte counts; preflight refuses missing, malformed, or uncomputable sizing rather than deriving it from ambient environment state. Native execution inspects `/opt` directly. Host profiles exercise `storage.preflight.v1` only inside isolated roots and cannot authorize mutation. The internal late-mount decision seam is `storage-readiness [--json] ELAPSED LAST_PROBE absent|ready|started|failed`; its same-boot claim prevents duplicate authorization and `failed` explicitly permits a retry without starting a service directly.
+
 Optional manually invoked hardware/evidence commands should use explicit profiles:
 
     make router-probe PROFILE=ac3100

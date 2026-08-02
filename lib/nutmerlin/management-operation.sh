@@ -33,6 +33,7 @@ roots_are_isolated() {
 management_operation_run() {
 	operation_id=$1
 	output_format=$2
+	shift 2
 
 	case $operation_id in
 		core.self-check.v1)
@@ -47,6 +48,14 @@ management_operation_run() {
 			;;
 		platform.eligibility.v1)
 			platform_eligibility_run "$output_format"
+			return $?
+			;;
+		storage.preflight.v1)
+			storage_preflight_run "$output_format" "$@"
+			return $?
+			;;
+		storage.readiness.v1)
+			storage_readiness_run "$output_format" "$@"
 			return $?
 			;;
 		*)

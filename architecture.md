@@ -368,6 +368,8 @@ Boot-time absent /opt follows the readiness schedule. Unexpected runtime loss, r
 
 The latch closes new policy activation, commitment, dispatch, update/config activation, rollback finalization, and clean uninstall until deterministic reconciliation and explicit clear. Safe local diagnostics and qualified read-only monitoring may remain.
 
+The `storage.preflight.v1` operation inspects native `/opt` and consumes closed mount, composite filesystem/device identity, exact observed mount options, exact-profile, semantic, and sizing evidence. Its transaction and temporary byte counts are explicit operation inputs calculated by the package or release planner, not ambient environment configuration. Identity, mount, profile, journaling, sizing, and space gates run before any disposable semantic probe. Test profiles can prove classification but always refuse mutation; only a positively eligible native exact-qualified profile returns downstream mutation eligibility. `storage.readiness.v1` expresses the bounded late-mount decision and one-start claim without starting services itself; its transient root has a fixed production path, owner, and mode. The owned lifecycle installed by the later deployment ticket supplies hook, timer, validation, and service wiring.
+
 ## 7. Policy activation and dispatch flow
 
 Activation is separate from saving a draft:

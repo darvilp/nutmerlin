@@ -520,6 +520,8 @@ Using disposable data, test the exact router/device/filesystem/mount profile for
 
 Ext4 is the reference. FAT/VFAT/exFAT and permission emulation are expected refusal. Other filesystems require the same exact matrix.
 
+Host tests drive `storage.preflight.v1` with disposable exact-profile evidence and explicit transaction/temporary byte inputs; the result is explicitly simulation-only and cannot authorize installation. An isolated native-adapter fixture proves the CLI retains the selected Entware root, records exact mount options, and changes its composite identity when the device serial changes beneath a constant filesystem UUID. Injection, missing-size, invalid-size, and pre-probe refusal cases must prove zero external mutation. Readiness tests cover concurrent claims and symlinked, weakly permissioned, or malformed transient state without starting a service.
+
 ### 11.2 Late mount and runtime faults
 
 | ID | Scenario | Expected result |

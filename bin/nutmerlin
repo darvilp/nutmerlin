@@ -35,6 +35,8 @@ prepare_host_roots() {
 
 usage() {
 	printf '%s\n' 'usage: nutmerlin {self-check|platform-eligibility} [--json]' >&2
+	printf '%s\n' '       nutmerlin storage-preflight [--json] TRANSACTION_BYTES TEMPORARY_BYTES' >&2
+	printf '%s\n' '       nutmerlin storage-readiness [--json] ELAPSED LAST_PROBE absent|ready|started|failed' >&2
 	exit 64
 }
 
@@ -64,6 +66,45 @@ case $command_name in
 			. "$program_dir/../lib/nutmerlin/platform-eligibility.sh"
 			management_operation_run platform.eligibility.v1 "$output_format"
 		fi
+		;;
+	storage-preflight)
+		output_format=human
+		if [ "${1:-}" = --json ]; then
+			output_format=json
+			shift
+		fi
+		[ "$#" -eq 2 ] || usage
+		# shellcheck disable=SC1091
+		. "$program_dir/../lib/nutmerlin/management-operation.sh"
+		# shellcheck disable=SC1091
+		. "$program_dir/../lib/nutmerlin/storage-qualification.sh"
+		# shellcheck disable=SC1091
+		. "$program_dir/../lib/nutmerlin/storage-preflight.sh"
+		if [ "${NUTMERLIN_ENABLE_TEST_ADAPTERS:-0}" != 1 ] || ! roots_are_isolated; then
+			NUTMERLIN_STORAGE_ADAPTER=native
+			NUTMERLIN_ENTWARE_ROOT=/opt
+			export NUTMERLIN_STORAGE_ADAPTER NUTMERLIN_ENTWARE_ROOT
+		fi
+		management_operation_run storage.preflight.v1 "$output_format" "$@"
+		;;
+	storage-readiness)
+		output_format=human
+		if [ "${1:-}" = --json ]; then
+			output_format=json
+			shift
+		fi
+		[ "$#" -eq 3 ] || usage
+		# shellcheck disable=SC1091
+		. "$program_dir/../lib/nutmerlin/management-operation.sh"
+		if [ "${NUTMERLIN_ENABLE_TEST_ADAPTERS:-0}" = 1 ]; then
+			roots_are_isolated || exit 78
+		else
+			NUTMERLIN_STATUS_ROOT=/tmp/nutmerlin
+			export NUTMERLIN_STATUS_ROOT
+		fi
+		# shellcheck disable=SC1091
+		. "$program_dir/../lib/nutmerlin/storage-preflight.sh"
+		management_operation_run storage.readiness.v1 "$output_format" "$@"
 		;;
 	*)
 		usage

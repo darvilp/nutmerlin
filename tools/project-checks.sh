@@ -7,7 +7,7 @@ command_name=${1:-}
 
 require_commands() {
 	missing=0
-	for required_command in make shellcheck shfmt bats jq rg tar gzip; do
+	for required_command in make shellcheck shfmt bats jq rg tar gzip python3; do
 		if ! command -v "$required_command" >/dev/null 2>&1; then
 			printf 'missing required host command: %s\n' "$required_command" >&2
 			missing=1
@@ -79,7 +79,9 @@ lib/
 lib/nutmerlin/
 lib/nutmerlin/management-operation.sh
 lib/nutmerlin/platform-eligibility.sh
-lib/nutmerlin/platform-qualification.sh'
+lib/nutmerlin/platform-qualification.sh
+lib/nutmerlin/storage-preflight.sh
+lib/nutmerlin/storage-qualification.sh'
 	mv -- "$temporary_package" "$repository_root/dist/nutmerlin-core-dev.tar.gz"
 	rm -f -- "$temporary_archive"
 	trap - EXIT HUP INT TERM

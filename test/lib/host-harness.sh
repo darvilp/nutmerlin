@@ -13,6 +13,7 @@ host_harness_setup() {
 		"$NUTMERLIN_TEST_ROOT/opt" \
 		"$NUTMERLIN_TEST_ROOT/status" \
 		"$NUTMERLIN_TEST_ROOT/web"
+	chmod 700 "$NUTMERLIN_TEST_ROOT/status"
 
 	NUTMERLIN_ROUTER_ROOT=$NUTMERLIN_TEST_ROOT/jffs
 	NUTMERLIN_ENTWARE_ROOT=$NUTMERLIN_TEST_ROOT/opt
@@ -31,6 +32,10 @@ host_harness_setup() {
 			'exit 99' >"$NUTMERLIN_TEST_ROOT/bin/$command_name"
 		chmod 700 "$NUTMERLIN_TEST_ROOT/bin/$command_name"
 	done
+	if [ -n "${NUTMERLIN_TEST_STORAGE_PROBE_HELPER:-}" ]; then
+		cp -- "$NUTMERLIN_TEST_STORAGE_PROBE_HELPER" "$NUTMERLIN_TEST_ROOT/bin/nutmerlin-storage-durability-probe"
+		chmod 700 "$NUTMERLIN_TEST_ROOT/bin/nutmerlin-storage-durability-probe"
+	fi
 
 	PATH=$NUTMERLIN_TEST_ROOT/bin:$PATH
 	export PATH
