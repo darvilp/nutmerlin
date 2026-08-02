@@ -89,6 +89,14 @@ Operation `platform.eligibility.v1` reports support classification separately fr
 
 Storage qualification uses `bin/nutmerlin storage-preflight [--json] TRANSACTION_BYTES TEMPORARY_BYTES`. The package or release planner supplies the two closed, non-negative byte counts; preflight refuses missing, malformed, or uncomputable sizing rather than deriving it from ambient environment state. Native execution inspects `/opt` directly. Host profiles exercise `storage.preflight.v1` only inside isolated roots and cannot authorize mutation. The internal late-mount decision seam is `storage-readiness [--json] ELAPSED LAST_PROBE absent|ready|started|failed`; its same-boot claim prevents duplicate authorization and `failed` explicitly permits a retry without starting a service directly.
 
+Dependency planning uses:
+
+    bin/nutmerlin dependency-plan [--json] interactive [current|keep-compatible] [none|ssh]
+    bin/nutmerlin dependency-plan [--json] unattended none|current|keep-compatible [none|ssh]
+    bin/nutmerlin dependency-plan [--json] uninstall
+
+Operation `dependency.plan.v1` is a dry-run and never invokes `opkg`. Interactive planning defaults to `current`; unattended `none` emits but refuses any required mutation. The only initial optional capability is `ssh`. Host adapter evidence always exits with configuration refusal even when the calculated plan is otherwise coherent, so it cannot authorize shared Entware changes. Current AArch64 binary execution, configuration behavior, and `dummy-ups` smoke remain separate package/ABI evidence and must not be inferred from host fixtures.
+
 Optional manually invoked hardware/evidence commands should use explicit profiles:
 
     make router-probe PROFILE=ac3100

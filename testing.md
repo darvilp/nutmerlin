@@ -270,6 +270,8 @@ Evidence includes:
 
 A coherent older cohort may pass compatibility probes but is labeled compatibility-only and cannot qualify current hardware.
 
+Host tests exercise `dependency.plan.v1` through the public CLI and a closed isolated Entware adapter. They cover a current no-change cohort, the full fresh core closure, a scoped coherent-NUT upgrade, explicit compatibility-only preservation after all mandatory probes, unattended-policy refusal, optional SSH selection, exact feed/verifier provenance, mixed/incomplete/unsafe/newer refusal, conservative byte totals, and retain-all uninstall. Security cases cover bounded structured evidence, symlinked status metadata, invalid capability input, and proof that no package-manager mutation command exists or runs. These host results establish planner behavior only; they do not substitute for current AArch64 package/ABI execution.
+
 ARMv7 user-mode or exact-feed execution is optional legacy evidence. Full firmware emulation is not a release gate.
 
 ## 7. Layer 4 — simulated Merlin platform profiles

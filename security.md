@@ -78,6 +78,8 @@ It shall not:
 
 Package mutation is limited to the declared coherent cohort after an exact plan, free-space check, provenance record, and explicit dependency policy where unattended.
 
+`dependency.plan.v1` itself is always a dry-run. It directly inspects size-bounded regular-file Entware metadata and may execute only the declared verifier and NUT version/help probes after the observed feed URL, architecture, and exact cached-index byte count and digest match the release catalog; it contains no package-manager update, install, upgrade, remove, feed-rewrite, or repair call. The release catalog records the official configured feed URL without rewriting it and authenticates the cached index through independently shipped exact size and digest records. A cached-feed mismatch, oversized, symlinked, or malformed package database, untrusted test root, or invalid evidence refuses the plan. Host simulation cannot grant mutation authority, and a successful native plan still grants no mutation authority to the planning operation.
+
 ### 4.2 Foreign deployment boundary
 
 An existing NUT configuration is project-owned only when the ownership manifest, installation ID, managed artifacts, and independent evidence agree.

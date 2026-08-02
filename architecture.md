@@ -164,7 +164,13 @@ Host shims implement the same boundary. Capability probes decide platform eligib
 
 This adapter validates the preexisting Entware prerequisite and computes a scoped package plan.
 
-It may inspect and mutate only the declared package cohort. It never installs Entware, repairs opkg as a platform, changes feeds, formats storage, performs blanket upgrade, selects private NUT binaries, or removes packages during ordinary uninstall.
+The implemented `dependency.plan.v1` operation is read-only. Its release-matched `nutmerlin.entware-cohort.v1` catalog pins the official configured feed URL separately from the HTTPS catalog-provenance URL, package architecture, complete feed-index byte count and digest, exact NUT and `gpgv2` records, package dependency/provider relationships, the complete core transitive closure, required binary/option/environment contracts, and optional capability roots. The initial optional mapping is `ssh` to the three current Entware OpenSSH client packages. The `libnetsnmp-ssl` package is present only as the current feed's provider for `nut-common`'s transitive `libnetsnmp` requirement; it does not enable an SNMP driver or operation.
+
+The native adapter reads the selected Entware root, executable package-manager prerequisite, status database, feed configuration, cached index, verifier, and installed NUT binaries. It hashes the cached index and runs only version/help probes against installed NUT binaries. It never invokes the package manager. Host adapters use private roots, are labeled as simulation or host-native evidence, and cannot return an install-authorizing result.
+
+Plans contain exact per-package candidate provenance, observed versions, and every proposed install or scoped upgrade, with archive bytes as temporary need and the complete installed size of each mutation as the conservative transaction need. The planner adds the 16 MiB post-transaction headroom. Missing, mixed, unsafe, newer, wrong-feed, wrong-architecture, unhealthy, or uncomputable evidence fails closed. An explicit compatibility-only keep also requires binary, option, configuration, and isolated `dummy-ups` probe evidence. Ordinary uninstall produces a retain-all plan for every observed Entware package.
+
+A later lifecycle executor may mutate only the accepted declared plan after the independent storage and policy gates. It never installs Entware, repairs opkg as a platform, changes feeds, formats storage, performs blanket upgrade, selects private NUT binaries, downgrades automatically, or removes packages during ordinary uninstall.
 
 ### 5.4 Release lifecycle manager
 

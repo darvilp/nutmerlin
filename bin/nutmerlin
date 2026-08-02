@@ -35,6 +35,9 @@ prepare_host_roots() {
 
 usage() {
 	printf '%s\n' 'usage: nutmerlin {self-check|platform-eligibility} [--json]' >&2
+	printf '%s\n' '       nutmerlin dependency-plan [--json] interactive [current|keep-compatible] [none|ssh]' >&2
+	printf '%s\n' '       nutmerlin dependency-plan [--json] unattended none|current|keep-compatible [none|ssh]' >&2
+	printf '%s\n' '       nutmerlin dependency-plan [--json] uninstall' >&2
 	printf '%s\n' '       nutmerlin storage-preflight [--json] TRANSACTION_BYTES TEMPORARY_BYTES' >&2
 	printf '%s\n' '       nutmerlin storage-readiness [--json] ELAPSED LAST_PROBE absent|ready|started|failed' >&2
 	exit 64
@@ -66,6 +69,25 @@ case $command_name in
 			. "$program_dir/../lib/nutmerlin/platform-eligibility.sh"
 			management_operation_run platform.eligibility.v1 "$output_format"
 		fi
+		;;
+	dependency-plan)
+		output_format=human
+		if [ "${1:-}" = --json ]; then
+			output_format=json
+			shift
+		fi
+		if [ "$#" -lt 1 ] || [ "$#" -gt 3 ]; then
+			usage
+		fi
+		# shellcheck disable=SC1091
+		. "$program_dir/../lib/nutmerlin/management-operation.sh"
+		# shellcheck disable=SC1091
+		. "$program_dir/../lib/nutmerlin/dependency-cohort.sh"
+		# shellcheck disable=SC1091
+		. "$program_dir/../lib/nutmerlin/dependency-adapter.sh"
+		# shellcheck disable=SC1091
+		. "$program_dir/../lib/nutmerlin/dependency-plan.sh"
+		management_operation_run dependency.plan.v1 "$output_format" "$@"
 		;;
 	storage-preflight)
 		output_format=human

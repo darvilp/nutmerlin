@@ -30,7 +30,7 @@ teardown() {
 
 @test "runtime source contains no forbidden command or listener surface" {
 	run rg -n \
-		'upscmd|upsrw|load[.]off|shutdown[.]|ForceOff|socat|netcat|nc -l|iptables|ip6tables|opkg' \
+		'upscmd|upsrw|load[.]off|shutdown[.]|ForceOff|socat|netcat|nc -l|iptables|ip6tables|opkg[[:space:]]+(update|upgrade|install|remove|configure|download)' \
 		"$REPOSITORY_ROOT/bin" "$REPOSITORY_ROOT/lib"
 
 	[ "$status" -eq 1 ]

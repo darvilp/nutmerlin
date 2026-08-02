@@ -50,6 +50,10 @@ management_operation_run() {
 			platform_eligibility_run "$output_format"
 			return $?
 			;;
+		dependency.plan.v1)
+			dependency_plan_run "$output_format" "$@"
+			return $?
+			;;
 		storage.preflight.v1)
 			storage_preflight_run "$output_format" "$@"
 			return $?

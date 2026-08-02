@@ -77,6 +77,9 @@ bin/
 bin/nutmerlin
 lib/
 lib/nutmerlin/
+lib/nutmerlin/dependency-adapter.sh
+lib/nutmerlin/dependency-cohort.sh
+lib/nutmerlin/dependency-plan.sh
 lib/nutmerlin/management-operation.sh
 lib/nutmerlin/platform-eligibility.sh
 lib/nutmerlin/platform-qualification.sh
