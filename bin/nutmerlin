@@ -1,0 +1,63 @@
+#!/bin/sh
+
+set -eu
+
+program_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+temporary_root=
+
+cleanup() {
+	if [ -n "$temporary_root" ] && [ -d "$temporary_root" ]; then
+		rm -rf -- "$temporary_root"
+	fi
+}
+
+prepare_host_roots() {
+	if [ -n "${NUTMERLIN_ISOLATION_ROOT:-}" ]; then
+		return
+	fi
+
+	temporary_root=$(mktemp -d "${TMPDIR:-/tmp}/nutmerlin-self-check.XXXXXX")
+	trap cleanup EXIT HUP INT TERM
+	mkdir -p \
+		"$temporary_root/jffs" \
+		"$temporary_root/opt" \
+		"$temporary_root/status" \
+		"$temporary_root/web"
+
+	NUTMERLIN_ISOLATION_ROOT=$temporary_root
+	NUTMERLIN_ROUTER_ROOT=$temporary_root/jffs
+	NUTMERLIN_ENTWARE_ROOT=$temporary_root/opt
+	NUTMERLIN_STATUS_ROOT=$temporary_root/status
+	NUTMERLIN_WEB_ROOT=$temporary_root/web
+	export NUTMERLIN_ISOLATION_ROOT NUTMERLIN_ROUTER_ROOT
+	export NUTMERLIN_ENTWARE_ROOT NUTMERLIN_STATUS_ROOT NUTMERLIN_WEB_ROOT
+}
+
+usage() {
+	printf '%s\n' 'usage: nutmerlin self-check [--json]' >&2
+	exit 64
+}
+
+[ "$#" -ge 1 ] || usage
+command_name=$1
+shift
+
+case $command_name in
+	self-check)
+		output_format=human
+		if [ "$#" -gt 0 ]; then
+			if [ "$#" -ne 1 ] || [ "$1" != "--json" ]; then
+				usage
+			fi
+			output_format=json
+		fi
+		prepare_host_roots
+		# The installed CLI resolves its version-matched core relative to itself.
+		# shellcheck disable=SC1091
+		. "$program_dir/../lib/nutmerlin/management-operation.sh"
+		management_operation_run core.self-check.v1 "$output_format"
+		;;
+	*)
+		usage
+		;;
+esac

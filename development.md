@@ -43,7 +43,7 @@ An Ubuntu/Debian development host normally needs:
 
     sudo apt update
     sudo apt install -y \
-      git gh make shellcheck shfmt bats jq curl \
+      git gh make shellcheck shfmt bats jq ripgrep curl \
       openssh-client rsync netcat-openbsd \
       python3 python3-venv smartmontools f3
 
@@ -53,16 +53,32 @@ NUT/Entware binaries used for release qualification come from the exact test coh
 
 ## 4. Stable repository command surface
 
-The repository should converge on stable local entry points:
+The implemented host-safe command surface is:
 
     make bootstrap
     make lint
     make test
     make test-unit
-    make test-nut
     make test-security
     make docs-check
     make package
+
+`make bootstrap` checks host prerequisites and never installs or changes them.
+The remaining commands operate only on the checkout and disposable host-test
+roots. `make test-nut` will be added with the isolated `dummy-ups` integration
+ticket; it is not an alias for host-unit evidence.
+
+The first complete local CLI operation is:
+
+    bin/nutmerlin self-check
+    bin/nutmerlin self-check --json
+
+The JSON result schema is `nutmerlin.management-result.v1`, and the versioned
+operation identifier is `core.self-check.v1`. Current stable exit classes are
+`success` (process status 0), `usage` (64), and `configuration` (78). The
+self-check creates disposable isolated roots when the harness has not supplied
+them. It performs no router, firewall, service, Entware, NUT, WebUI, or hardware
+mutation.
 
 Optional manually invoked hardware/evidence commands should use explicit profiles:
 

@@ -57,6 +57,16 @@ Normal development runs from a Linux filesystem using host shims and NUT dummy-u
 
 No automated test may issue UPS output-off. Production-router mutation requires NUTMERLIN_ALLOW_PRODUCTION_ROUTER=1, and an actual host-shutdown test requires NUTMERLIN_ALLOW_HOST_SHUTDOWN=1 plus documented safeguards.
 
+The initial host-safe core slice is available without hardware:
+
+    make bootstrap
+    make test
+    bin/nutmerlin self-check --json
+
+The self-check runs through the versioned local management-operation path using
+disposable isolated roots. It reports monitoring-only health and does not call
+router, firewall, service, package, NUT, WebUI, or hardware controls.
+
 ## Project documents
 
 - [CONTEXT.md](CONTEXT.md) — canonical domain terminology.
@@ -75,6 +85,10 @@ No automated test may issue UPS output-off. Production-router mutation requires 
 
 ## Status
 
-Design reconciliation is complete; production implementation has not begun. The accepted decisions are ADRs 0001–0097 under decisions/. The remaining public-release research blocker is selection of two independent release-root fingerprint publication channels and a tested emergency root-replacement procedure.
+Design reconciliation is complete and implementation has begun with the
+host-safe core self-check. The accepted decisions are ADRs 0001–0097 under
+decisions/. The remaining public-release research blocker is selection of two
+independent release-root fingerprint publication channels and a tested
+emergency root-replacement procedure.
 
 The repository is public at darvilp/nutmerlin under GPL-3.0-or-later. Versions, package availability, firmware behavior, and hardware claims must be requalified rather than assumed from this planning packet.

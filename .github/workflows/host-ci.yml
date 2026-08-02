@@ -1,0 +1,24 @@
+name: Host CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  host-safe-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install host test tools
+        run: sudo apt-get update && sudo apt-get install -y bats jq ripgrep shellcheck shfmt
+      - name: Check prerequisites
+        run: make bootstrap
+      - name: Run host-safe checks
+        run: make test
+      - name: Build core package
+        run: make package
