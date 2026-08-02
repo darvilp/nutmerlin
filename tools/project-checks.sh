@@ -77,7 +77,9 @@ bin/
 bin/nutmerlin
 lib/
 lib/nutmerlin/
-lib/nutmerlin/management-operation.sh'
+lib/nutmerlin/management-operation.sh
+lib/nutmerlin/platform-eligibility.sh
+lib/nutmerlin/platform-qualification.sh'
 	mv -- "$temporary_package" "$repository_root/dist/nutmerlin-core-dev.tar.gz"
 	rm -f -- "$temporary_archive"
 	trap - EXIT HUP INT TERM

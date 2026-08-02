@@ -105,6 +105,8 @@ Before executing project code:
 
 No curl-pipe or first-seen adjacent key is accepted.
 
+An unsupported-platform acknowledgment is not a safety bypass. Experimental, compatibility-only, or legacy installation remains monitoring-only and is eligible only after every core ownership, hook, firewall, identity, mount, and boot probe succeeds. Unknown or incompatible core evidence refuses mutation; optional capability failures grant no fallback authority.
+
 Public release is blocked until two independent project-controlled fingerprint channels and a tested emergency root-replacement procedure are selected. This is unresolved release research, not permission to weaken bootstrap.
 
 ### 4.4 Release signing and rotation

@@ -534,6 +534,8 @@ Every record carries boot ID, monotonic position, wall timestamp, and wall_time_
 
 Platform support is capability-based within latest-qualified AArch64 3004.388.x and 3006.102.x. Exact model/revision reports are stronger evidence, not a separate promise. Reproducible negative evidence establishes known incompatibility for the affected combination/capability.
 
+The platform report separates support from install disposition. Exact-qualified current platforms are supported; other current-family releases are compatibility-only; Merlin 386/ARMv7 is legacy best-effort; and an unsupported platform with every core safety probe available is experimental. The latter three require explicit acknowledgment before a later monitoring-only install. Unknown, missing, or incompatible core lifecycle evidence refuses installation, while WebUI, wall-clock-security, and local-script probe failures remain scoped to those optional capabilities.
+
 UPS support is not a device-level blanket. The harmless base source contract and each status/numeric capability are qualified separately for exact UPS, firmware where known, driver profile, and NUT version.
 
 Hardware evidence layers remain distinct:

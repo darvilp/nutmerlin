@@ -81,6 +81,8 @@ Mandatory preflight probes shall determine whether a router environment satisfie
 
 Known-incompatible evidence shall override general eligibility and fail closed for the affected capability or installation.
 
+Support status and installation safety shall be reported separately. A platform outside the support contract may proceed only as an explicitly acknowledged, monitoring-only experimental installation when every core lifecycle probe is positively available. Missing, unknown, or incompatible core evidence shall refuse installation. Missing or incompatible Addons API, trusted-clock, or resource-containment evidence shall disable only the WebUI, wall-clock-dependent security work, or local-script capability respectively.
+
 ### REQ-SUP-003 — Exact hardware qualification (P0)
 
 Exact router model and hardware revision qualification shall require one complete, reproducible, waiver-free hardware report. The report shall identify the exact router, firmware, architecture, Entware feed and packages, addon, storage profile, and structured non-destructive results.

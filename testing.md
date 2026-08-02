@@ -280,6 +280,10 @@ Required scenarios:
 
 - supported and unsupported firmware-family detection;
 - newly published but not-yet-qualified stable represented as unqualified;
+- explicit support versus install-disposition results for compatibility-only,
+  legacy best-effort, and probe-safe experimental platforms;
+- refusal on missing, unknown, or incompatible core evidence while Addons API,
+  clock, and resource-limit failures disable only their scoped capabilities;
 - Addons API absent or partial;
 - exact hook insertion/removal and unrelated content preservation;
 - web-page mounting and failure;

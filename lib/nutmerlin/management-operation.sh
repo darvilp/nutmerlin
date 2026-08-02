@@ -45,6 +45,10 @@ management_operation_run() {
 				return 78
 			fi
 			;;
+		platform.eligibility.v1)
+			platform_eligibility_run "$output_format"
+			return $?
+			;;
 		*)
 			printf '%s\n' 'unknown management operation' >&2
 			return 64

@@ -80,6 +80,13 @@ self-check creates disposable isolated roots when the harness has not supplied
 them. It performs no router, firewall, service, Entware, NUT, WebUI, or hardware
 mutation.
 
+Platform eligibility uses the same local controller:
+
+    bin/nutmerlin platform-eligibility
+    bin/nutmerlin platform-eligibility --json
+
+Operation `platform.eligibility.v1` reports support classification separately from installation disposition. The version-controlled production qualification profile initially names no qualified firmware release; support claims remain absent until release evidence supplies exact versions. Native semantic probes that have not been qualified report `unknown`. Host simulations are explicitly labeled and cannot create production qualification evidence or authorize installation.
+
 Optional manually invoked hardware/evidence commands should use explicit profiles:
 
     make router-probe PROFILE=ac3100
