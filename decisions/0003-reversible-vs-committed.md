@@ -18,6 +18,8 @@ FSD is available only in the committed phase and is an advanced feature.
 
 ## Consequences
 
-- The normal three-minute shutdown timer does not use FSD.
+- No reversible outage timer or duration is enabled or prefilled by default.
+- A 180-second delay may appear only as a clearly labeled workstation example that requires explicit configuration and harmless validation; it is not a general recommendation.
+- Reversible outage timers do not use FSD.
 - UI, logs, and configuration must show the commit boundary.
 - Policy tests must cover power restoration before and after commitment.

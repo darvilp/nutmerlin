@@ -1,27 +1,28 @@
-# ADR 0005: Keep the RT-AC3100 optional
+# ADR 0005: Treat Merlin 386/ARMv7 as legacy best-effort
 
 - Status: Accepted
 - Date: 2026-08-01
 
 ## Context
 
-The available spare router is an ASUS RT-AC3100 currently running stock Asuswrt. It can provide real Addons API, JFFS, Entware, ARMv7, USB, mount-order, and lifecycle coverage, but its Merlin branch is end-of-life and setting it up adds friction.
+The available spare router is an ASUS RT-AC3100 currently running stock Asuswrt. It can provide real Addons API, JFFS, Entware, ARMv7, USB, mount-order, and lifecycle evidence, but its Merlin branch is end-of-life.
 
-The project must be easy to develop through Codex in WSL2 without requiring old hardware to be continuously available.
+Its availability as maintainer-owned hardware does not justify making its platform part of the community support contract.
 
 ## Decision
 
-The RT-AC3100 is an optional, manually invoked legacy integration profile.
+Merlin 386/ARMv7 is a legacy best-effort platform, not a supported release tier.
 
 - Host tests and NUT `dummy-ups` are the normal development path.
-- No standard CI or pull-request check requires the RT-AC3100.
-- The router is used for selected 386/ARMv7 compatibility and lifecycle tests.
+- No standard CI, pull-request check, or release gate requires the RT-AC3100.
+- The router is an optional test asset and is used only when it provides meaningful compatibility or lifecycle evidence.
+- A test may skip it when setup cost, hardware condition, or platform differences make its evidence immaterial.
+- Compatibility obtained through portable code and capability detection is welcome, but is not a maintenance or security promise.
 - The RT-AX86U Pro remains the manually gated production-reference target.
-- Community hardware reports may satisfy cross-model release coverage.
 
 ## Consequences
 
-- Initial development can begin without locating a drive or flashing the spare router.
-- Hardware-specific regressions may be discovered later than host-level defects.
-- Platform adapters and capability detection remain mandatory.
-- The old router provides valuable legacy coverage without defining the whole project architecture.
+- Initial development and releases do not depend on locating, flashing, or maintaining the spare router.
+- Legacy compatibility regressions do not block a release.
+- Users must not infer current-firmware security support from successful operation on Merlin 386.
+- The old router may provide useful evidence without defining product scope or architecture.

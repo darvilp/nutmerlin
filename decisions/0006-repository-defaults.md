@@ -7,7 +7,7 @@
 
 Use these project defaults:
 
-- GitHub repository: `danielarvilpayne/nutmerlin`
+- GitHub repository: `darvilp/nutmerlin`
 - public visibility
 - GPL-3.0-or-later license
 - GitHub Actions for host CI

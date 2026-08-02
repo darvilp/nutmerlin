@@ -1,152 +1,102 @@
-# NUTMerlin repository setup
+# NUTMerlin repository and release policy
 
-## 1. Confirmed defaults
+## 1. Confirmed repository
 
-- GitHub owner: `danielarvilpayne`
-- Repository: `nutmerlin`
+- GitHub repository: darvilp/nutmerlin
 - Visibility: public
 - License: GPL-3.0-or-later
 - CI: GitHub Actions
-- Default branch: `main`
-- Development workflow: feature branch -> draft pull request -> review -> merge
+- Default branch: main
+- Development workflow: feature branch → draft pull request → review → merge
 
-The repository should be created only when the local starter packet is ready to become the initial commit.
+The repository already exists. Documentation and automation shall not contain the superseded danielarvilpayne owner.
 
-## 2. Creation from WSL2
+## 2. Branch protection
 
-Authenticate:
+main should require:
 
-```sh
-gh auth status || gh auth login
-```
+- pull request before ordinary merge;
+- required host CI checks;
+- branch up to date before merge where practical;
+- no force pushes;
+- no branch deletion.
 
-From the repository root:
+A solo maintainer may retain an emergency bypass, but normal project and Codex work uses reviewed branches and preserves unrelated worktree changes.
 
-```sh
-git init -b main
-git add .
-git commit -m "docs: define NUTMerlin architecture and development plan"
+## 3. CI and hardware separation
 
-gh repo create danielarvilpayne/nutmerlin \
-  --public \
-  --source=. \
-  --remote=origin \
-  --push \
-  --description "Asuswrt-Merlin addon for Network UPS Tools and safe power-event orchestration"
-```
+Ordinary pull requests run hardware-free checks for:
 
-Do not run the command if a repository with that name already exists. Check first:
+- lint and POSIX shell conformance;
+- host platform/mock tests;
+- configuration generation;
+- policy/action state;
+- NUT dummy-ups integration;
+- security and input validation;
+- documentation links/consistency;
+- package/release artifact construction.
 
-```sh
-gh repo view danielarvilpayne/nutmerlin
-```
+Current Entware AArch64 package/ABI execution is required release evidence even when it is not part of every pull request.
 
-## 3. Initial repository contents
+Exact-router, storage, physical-UPS, Windows shutdown, WinRM, and Redfish tests are manually triggered evidence workflows. They do not become ordinary PR gates.
 
-Before the first push, include:
+## 4. Issue and pull-request boundaries
 
-```text
-.github/workflows/ci.yml
-.gitignore
-.editorconfig
-LICENSE
-README.md
-AGENTS.md
-requirements.md
-architecture.md
-plan.md
-testing.md
-security.md
-hardware.md
-development.md
-repository.md
-backlog.md
-references.md
-decisions/
-test/scenarios/
-```
+Priority and area labels may describe accepted capability scope, but a milestone label does not grant safety authority or replace evidence.
 
-Implementation directories can be created empty or with README placeholders:
+Useful label families include:
 
-```text
-src/
-lib/
-web/
-installer/
-test/unit/
-test/integration/
-test/shims/
-tools/
-packaging/
-```
+- priority:P0, priority:P1, priority:P2;
+- area:platform, area:nut, area:ui, area:policy, area:executor, area:security, area:testing;
+- hardware:required, hardware:legacy, hardware:production-reference;
+- blocked and good first issue.
 
-## 4. Initial branch protection
+Tickets generated from a later specification should retain explicit blocking relationships. Raw incoming community reports are triaged separately from already agent-ready project tickets.
 
-After CI exists, configure `main` to require:
+## 5. Authenticated release artifacts
 
-- pull request before merge
-- required CI checks
-- branch up to date before merge
-- no force pushes
-- no branch deletion
+An installable release publishes separate:
 
-A solo-maintainer project may allow the owner to bypass protection for emergency recovery, but ordinary Codex work should still use pull requests.
+- source archive;
+- required installable core archive;
+- optional exact-version WebUI archive;
+- canonical release manifest;
+- detached OpenPGP signature;
+- plain SHA-256 diagnostic checksums;
+- dependency/package provenance;
+- supported-platform and exact-hardware evidence;
+- migration and rollback notes;
+- known incompatibilities and absent conditional capabilities.
 
-## 5. Initial GitHub Actions jobs
+The signed manifest covers the version-locked core and WebUI artifacts, artifact names, byte sizes, SHA-256 hashes, compatibility metadata, component dependencies, and installer requirement. Plain hashes are diagnostic and never substitute for authentication. The WebUI has no separate release identity or update channel.
 
-Start with host-only jobs:
+CI produces deterministic artifacts and the completed canonical manifest. A maintainer signs that exact manifest outside CI with the accepted release-signing subkey after required evidence passes.
 
-```text
-lint
-unit-platform-mock
-unit-config
-unit-policy
-integration-nut-dummy
-security-input-validation
-package-artifact
-```
+Release publication and first install remain blocked until two independent project-controlled fingerprint channels and the emergency signing-root replacement procedure are selected and tested.
 
-Hardware tests are manual workflows and must never be required for a normal pull request.
+## 6. Update and catalog policy
 
-## 6. Suggested milestones
+NUTMerlin updates are administrator-initiated. There is no automatic install/update channel.
 
-1. `M0 Repository and test harness`
-2. `M1 NUT server MVP`
-3. `M2 Merlin UI`
-4. `M3 Policy engine`
-5. `M4 Common executors`
-6. `M5 Community beta`
+An AMTM or other catalog entry is Later and requires a separate accepted model for:
 
-## 7. Suggested labels
+- pinned release trust;
+- artifact ownership;
+- maintainer identity;
+- update initiation;
+- safe activation and rollback;
+- signing-root rotation/revocation;
+- emergency response.
 
-```text
-priority:P0
-priority:P1
-priority:P2
-area:platform
-area:nut
-area:ui
-area:policy
-area:executor
-area:security
-area:testing
-hardware:required
-hardware:ac3100
-hardware:ax86u-pro
-ups:cp1500pfclcd
-good first issue
-blocked
-```
+Catalog convenience cannot bypass the authenticated bundle, signed manifest, safe update window, or rollback quarantine.
 
-## 8. Release model
+## 7. Milestones
 
-Initial releases should publish:
+Repository milestones follow plan.md:
 
-- source archive
-- installable addon archive
-- SHA-256 checksums
-- generated dependency manifest
-- supported/tested hardware report
-- upgrade and rollback notes
+- P0 safe NUT core;
+- P1 common graceful orchestration;
+- P2 independently qualified native graceful adapters;
+- Later separately governed broad/high-risk scope.
 
-Do not implement an auto-update channel until update authenticity, rollback, and ownership behavior are tested.
+There is no separate final hardening milestone. Security, recovery, documentation, negative testing, and support evidence are exit gates for every capability.

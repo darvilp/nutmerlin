@@ -1,236 +1,288 @@
-# NUTMerlin hardware and bench setup
+# NUTMerlin hardware, qualification, and bench safety
 
-## 1. Confirmed development environment
+## 1. Reference environment is not the support contract
 
-| Component | Confirmed role |
-|---|---|
-| CyberPower `CP1500PFCLCD` | Real UPS hardware reference; USB HID through NUT `usbhid-ups` |
-| ASUS RT-AX86U Pro | Production router and final manually gated hardware target |
-| ASUS RT-AC3100 | Optional legacy Merlin/ARMv7 integration target; currently stock Asuswrt |
-| Windows desktop | Native Windows NUT-client and graceful-shutdown target |
-| WSL2 + Codex IDE beta | Primary development, test, packaging, and Git workflow environment |
+| Component | Maintainer use | Product meaning |
+| --- | --- | --- |
+| ASUS RT-AX86U Pro | Production-reference router | Manually gated exact-hardware evidence for one 3006.102.x model/revision/firmware; not proof of the family. |
+| ASUS RT-AC3100 | Available spare, currently stock Asuswrt | Optional legacy Merlin 386/ARMv7 evidence only; no release or security-support promise. |
+| CyberPower CP1500PFCLCD | Available physical UPS | Candidate usbhid-ups base/capability reports; not a runtime dependency or blanket supported-UPS claim. |
+| Windows desktop | Possible native NUT secondary and graceful-shutdown target | Client example only; NUTMerlin remains client-neutral. |
+| WSL2 with Codex IDE beta | Primary maintainer workspace | Development arrangement only; runtime and normal tests remain Linux/router based. |
 
-The CP1500PFCLCD is reported by the NUT Devices Dumps Library as working with `usbhid-ups`. Treat every writable variable and instant command as capability data, not as permission to expose it in the normal UI.
+NUTMerlin support is capability-based within the current AArch64 firmware-family contract. Exact model/revision qualification and exact UPS capability qualification are published evidence, not separate product tiers.
 
-## 2. Hardware policy
+## 2. Platform support and hardware tiers
 
-The RT-AC3100 is useful but **not part of the critical development path**.
+### 2.1 Supported platform contract
 
-Normal development and pull requests shall require only:
+The intended current families are:
 
-- WSL2 or another Linux host
-- repository test shims
-- a container or local NUT installation
-- NUT `dummy-ups`
+- 3004.388.x on AArch64;
+- 3006.102.x on AArch64.
 
-The RT-AC3100 is an optional manually invoked target for:
+Only the latest NUTMerlin-qualified stable release in each family is supported. A new upstream stable must pass qualification before support moves. The prior qualified release then becomes compatibility-only without a grace period.
 
-- Asuswrt-Merlin 386 compatibility
-- ARMv7 Entware compatibility
-- Addons API and web-page integration
-- `/jffs` hook behavior
-- late `/opt` mounting
-- USB hotplug and mount behavior
-- install, upgrade, rollback, reboot, and uninstall tests
+Mandatory capability probes determine eligibility. An eligible untested model remains inside the platform contract; an exact report makes it qualified hardware. Known reproducible incompatibility overrides general eligibility.
 
-The RT-AX86U Pro is reserved for final read-only and controlled real-UPS tests. Automated development commands must not target it without an explicit production-router override.
+### 2.2 Exact hardware qualification
 
-## 3. RT-AC3100 qualification
+One complete reproducible report qualifies one exact router model and hardware revision for the recorded combination.
 
-The RT-AC3100 is no longer supported by current Asuswrt-Merlin development. Its final Merlin release line is 386, with `386.14_2` as the last listed release. This makes it valuable as a legacy target but inappropriate as an internet-facing router.
+The report identifies:
 
-Before first use:
+- router model and hardware revision;
+- exact firmware version and family;
+- CPU architecture;
+- Entware feed and exact relevant packages;
+- NUT and addon versions;
+- storage device, filesystem, and mount options;
+- structured results and redacted diagnostics.
 
-1. Record its current stock Asuswrt version and hardware revision.
-2. Factory-reset it.
-3. Flash the final correct RT-AC3100 Asuswrt-Merlin image.
-4. Factory-reset after the firmware transition if required by the release notes or if configuration behavior is abnormal.
-5. Do not restore an old settings backup.
-6. Enable JFFS custom scripts/configs and LAN-only SSH.
-7. Keep remote administration, AiCloud, DDNS, FTP, SMB, media services, Download Master, WPS, and UPnP disabled unless a test explicitly needs one.
-8. Keep a copy of the stock firmware, Merlin image, checksum, rescue utility, and recovery instructions on the Windows PC.
+Every mandatory non-destructive core lifecycle, simulation, CLI, network, reboot, storage-fault, update/rollback, disable/enable, preservation, uninstall, and recovery check must pass without waiver or skip.
 
-The device has 128 MB flash, 512 MB RAM, one USB 2.0 port, and one USB 3.0 port. Use USB 3.0 for Entware storage and USB 2.0 for the UPS.
+The optional WebUI has a separate qualification result for the same exact platform. Its report covers component add/remove/re-add, exact version/schema match, Addons API mounting, authenticated dispatch and nonce behavior, update/rollback component preservation, and core/CLI survival when UI integration fails. Missing or negative WebUI evidence does not revoke core qualification.
 
-## 4. Recommended AP-mode topology
+Qualification does not expire after a fixed calendar interval. A firmware, hardware revision, Entware feed/ABI, NUT major/minor, relevant NUTMerlin platform behavior, security advisory, or reproducible compatibility fault triggers fresh current evidence. A reproducible negative report revokes the affected qualification until resolution and retest.
 
-The least disruptive topology is:
+### 2.3 UPS capability qualification
 
-```text
-Windows desktop --Ethernet--> primary RT-AX86U Pro
-                              |
-                              +--LAN Ethernet--> RT-AC3100 in AP mode
-                                                   |
-                                                   +--USB 3.0 storage for Entware
-                                                   +--USB 2.0 UPS cable when required
-```
+A NUT-compatible source is one exact UPS/driver/profile/NUT combination that:
 
-Recommended settings:
+- binds through a unique stable identity;
+- produces stable OL;
+- produces harmless short OB and recovery;
+- handles stale or disconnect/reconnect;
+- satisfies the base source profile without a writable command.
 
-- operating mode: Access Point
-- uplink: primary-router LAN or switch to an RT-AC3100 LAN port
-- WAN port: unused
-- management address: static or DHCP reservation on the primary LAN
-- example hostname: `nutmerlin-ac3100`
-- Wi-Fi radios: disabled unless a wireless-only test needs them
-- SSH and web administration: trusted LAN only
-- DHCP/NAT/firewall routing role: none
+Each additional field or behavior is independent:
 
-AP mode permits WSL2, Windows, WinNUT, and the test router to communicate over the existing Ethernet connection. No second Windows NIC, static route, double NAT, or direct PC-to-router cable is needed.
+- LB;
+- charge;
+- runtime;
+- voltage;
+- load;
+- overload;
+- replace-battery;
+- other status tokens.
 
-### Internet egress
+A device-list entry, driver match, or successful upsc query does not qualify all telemetry. Reports label a field observed, qualified, known_unreliable, or absent.
 
-"No WAN connection" and "no internet egress" are separate controls in AP mode. The WAN port can remain unused while the device still reaches the internet through its LAN gateway.
+## 3. Normal hardware-free path
 
-Recommended lifecycle:
+Normal development and pull requests require only:
 
-1. Temporarily allow egress for firmware verification and initial Entware package installation.
-2. After dependencies are installed, block the RT-AC3100 from internet access on the primary router.
-3. Re-enable egress only for deliberate package/update testing.
+- a Linux host or WSL2 Linux workspace;
+- platform/filesystem shims;
+- a container or local NUT installation;
+- isolated NUT dummy-ups;
+- current Entware AArch64 package/ABI execution for release evidence.
 
-NUTMerlin must not depend on internet access at runtime.
+No ordinary work waits for:
 
-## 5. Alternative isolated-router topology
+- the RT-AC3100;
+- the RT-AX86U Pro;
+- the CP1500PFCLCD;
+- Windows shutdown;
+- WSL USB passthrough;
+- full firmware emulation.
 
-Use router mode only for tests that specifically require WAN/LAN firewall separation:
+## 4. RT-AX86U Pro production-reference target
 
-```text
-Windows Wi-Fi or USB Ethernet
-          |
-          +--> RT-AC3100 LAN
-                    |
-                    +--> isolated test subnet
+The RT-AX86U Pro is an in-use production router. Every deployment or modification requires:
 
-RT-AC3100 WAN: disconnected
-```
+    NUTMERLIN_ALLOW_PRODUCTION_ROUTER=1
 
-This is not required for ordinary development. It is a manually prepared security/release test topology.
+Before a test:
 
-## 6. Persistent storage requirement
+- identify the exact firmware and hardware revision;
+- save current configuration and recovery instructions;
+- verify the test does not alter routing/firewall/DNS beyond the exact NUTMerlin scope;
+- use dummy-ups unless the test explicitly needs the physical UPS;
+- keep action executors dry-run/harmless;
+- prove missing/read-only /opt cannot trigger state-changing action;
+- keep a separate local recovery path.
 
-Asuswrt-Merlin itself is installed in internal flash. A USB drive is required only when running Entware and NUTMerlin on a real router.
+A successful report qualifies only its recorded combination and claims.
 
-Preferred media, in order:
+## 5. RT-AC3100 optional legacy target
 
-1. Small SATA SSD in a reputable USB enclosure
-2. Reputable external USB SSD
-3. High-quality, known-brand flash drive for intermittent test use
-4. High-endurance microSD card in a reliable USB reader for intermittent test use
-5. Unknown, promotional, or very old USB flash drive only as disposable temporary media
+The RT-AC3100 is useful only when its legacy platform supplies meaningful evidence. It is not part of the critical path, and setup may be skipped when cost, hardware condition, or architectural difference makes the result immaterial.
 
-A 16–64 GB device is ample. Capacity is not a meaningful quality indicator. Use ext4 and do not create swap by default.
+If used:
 
-## 7. Qualifying a USB flash drive
+1. Record stock firmware and hardware revision.
+2. Obtain and verify the final correct model-specific Merlin 386 image and recovery material.
+3. Follow upstream transition/reset guidance; do not restore an old settings backup.
+4. Enable only JFFS scripts and LAN-only administration needed by the test.
+5. Keep WAN-port routing, remote administration, cloud/file/media services, WPS, and UPnP disabled unless a named test requires one.
+6. Keep a local rescue utility, firmware copy, checksum, direct-access method, and reset/recovery instructions.
+7. Store no production-only credential reusable on the RT-AX86U Pro.
 
-There is no reliable visual or benchmark-only way to prove that a consumer USB stick has adequate write endurance. Many sticks expose no useful wear counter or SMART data. Qualification can reject bad media but cannot certify future longevity.
+Successful operation is legacy best-effort evidence, not current security maintenance.
 
-### 7.1 Identify the device
+## 6. Bench network topology
 
-Record:
+### 6.1 Recommended AP-mode legacy bench
 
-```sh
-lsusb
-lsblk -o NAME,MODEL,SERIAL,SIZE,TRAN,FSTYPE,MOUNTPOINTS
-udevadm info --query=all --name=/dev/sdX
-```
+    Windows/WSL development host -- primary trusted LAN
+                                         |
+                                         +-- RT-AC3100 LAN port, AP mode
+                                                |
+                                                +-- qualified Entware storage
+                                                +-- optional UPS USB only for a named test
 
-Prefer a device with:
+Recommended:
 
-- a real manufacturer and model
-- a stable serial number
-- a published warranty
-- consistent USB identity across reconnects
-- no prior unexplained disconnects or corruption
+- static management address or DHCP reservation;
+- WAN port unused;
+- Wi-Fi disabled unless testing Wi-Fi behavior;
+- SSH and web administration admitted only from named trusted hosts;
+- no DHCP/NAT routing role;
+- production and legacy credentials separated.
 
-### 7.2 Check whether health data exists
+An unused WAN port does not remove internet egress in AP mode. Permit egress only for deliberate firmware/package setup or test, then block the legacy router at the primary router.
 
-For a true USB flash drive:
+### 6.2 Router-mode firewall bench
 
-```sh
-sudo smartctl -a /dev/sdX
-```
+Use an isolated router-mode subnet only when a test needs actual WAN/LAN separation. Keep WAN disconnected and ensure the development host has a recovery path that does not depend on the device under test.
 
-Useful SMART data is uncommon. For a SATA SSD in a USB enclosure, try:
+## 7. Entware storage profiles
 
-```sh
-sudo smartctl -a /dev/sdX
-sudo smartctl -d sat -a /dev/sdX
-```
+### 7.1 Reference profile
 
-A USB-to-SATA bridge must pass through native commands for SMART to work. Prefer an enclosure that exposes the SSD's SMART attributes, including media wear, reallocated sectors, unsafe shutdowns, and error logs.
+Recommended always-on profile:
 
-### 7.3 Verify real capacity and data integrity
+- USB-attached SSD in a reliable enclosure;
+- journaled ext4;
+- execution enabled;
+- native Unix ownership and modes;
+- no swap;
+- noatime recommended for endurance but not required for correctness.
 
-On an empty mounted filesystem:
+A high-quality flash drive may be used for an intermittent test rig after validation; that does not confer an endurance promise. Brand, capacity, benchmark, SMART, or one successful fill test cannot prove remaining lifetime.
 
-```sh
-f3write /path/to/mount
-f3read /path/to/mount
-```
+FAT, VFAT, and exFAT are incompatible. NTFS, F2FS, ext3, or another name receives no implied support.
 
-This writes the free space and verifies that the data can be read back. It detects false capacity and immediate corruption. It does not measure remaining endurance.
+### 7.2 Required semantic qualification
 
-The faster direct-device `f3probe --destructive` test destroys the existing partition/data and should be used only when the correct block device has been positively identified.
+For the exact router/device/filesystem/mount options, use disposable data to prove:
 
-### 7.4 Inspect errors during qualification
+- stable storage and mount identity across reboot/reconnect;
+- persistent UID/GID;
+- directory/file modes 0700, 0600, and 0640;
+- case-sensitive stable names;
+- regular, symlink, and hard-link distinctions;
+- same-directory atomic rename;
+- successful file and containing-directory fsync;
+- reliable exclusive locks;
+- executable Entware binaries;
+- controlled interruption/remount without a mixed or silently lost journal or configuration generation.
 
-Before and after the test:
+Reject:
 
-```sh
-dmesg --follow
-sudo fsck.ext4 -f /dev/sdX1
-```
+- noexec;
+- read-only or unstable mounts;
+- ownership/mode emulation;
+- ignored chmod/chown;
+- inconsistent link behavior;
+- missing durable rename/fsync;
+- unexplained I/O/reset/disconnect errors.
 
-Reject the device after any unexplained:
+### 7.3 Media checks
 
-- USB resets or disconnects
-- I/O errors
-- read-only remounts
-- checksum mismatches
-- ext4 journal or metadata errors
-- extreme write-speed collapse followed by errors
-- unstable device identity
+Record identity and available health evidence with appropriate system tools such as lsusb, lsblk, udevadm, smartctl, dmesg, and fsck.
 
-### 7.5 Practical decision rule
+On empty disposable media, a complete F3 write/read cycle may detect false capacity and immediate corruption. It does not measure remaining endurance. A direct-device destructive probe must be performed only outside NUTMerlin automation, after positively identifying the exact expendable device and accepting total data loss.
 
-For the optional RT-AC3100 test rig, a known-brand stick that passes a complete F3 fill/read cycle and filesystem check can be used temporarily because the router will be powered only for testing. Keep the setup reproducible and assume the drive is disposable.
+SMART or wear data is optional evidence. Its absence does not fail support, and its presence does not replace filesystem/interruption tests.
 
-For an always-on production router, use an SSD rather than trying to infer endurance from an ordinary USB stick.
+### 7.4 Space and write behavior
 
-## 8. NUTMerlin write-minimization requirements
+Mutation requires the calculated transaction and package-manager temporary need plus at least 16 MiB post-transaction headroom.
 
-The addon shall be designed so that storage choice is not needlessly punished:
+Persistent layout budgets include:
 
-- no write on every NUT poll
-- no swap requirement
-- status snapshots in `/tmp`
-- logs sent to syslog or bounded files under `/opt`
-- persistent writes only for configuration, migrations, event transitions, and bounded audit records
-- `noatime` recommended for the Entware filesystem
-- explicit maximum log sizes and rotation
-- no traffic database, history graph, or high-frequency telemetry retention in the MVP
-- detect missing, read-only, or unhealthy `/opt` and fail safely
-- provide configuration export/backup and reproducible reinstall
-- cleanly stop before planned USB removal
+- 4 MiB detailed safety journal reserve;
+- 16 MiB default operational history;
+- 8 MiB ordinary policy-version store;
+- staged release/configuration material calculated before mutation.
 
-## 9. Windows and WSL connectivity
+High-frequency status stays in /tmp. No persistent poll record and no swap are required. JFFS receives only rare safety-boundary anchor updates, not operational history.
 
-Windows remains connected to the primary router by Ethernet. It reaches the optional RT-AC3100 through the normal LAN.
+## 8. USB UPS attachment and identity
 
-Runtime shutdown path:
+The preferred source identity is exact VID/PID/serial. The driver may bind only when the accepted profile resolves exactly one device.
 
-```text
-UPS -> NUT server on ASUS router -> native Windows NUT client -> Windows shutdown
-```
+If a UPS has no serial, a profile may use exact VID/PID plus accepted stable attributes only when exactly one candidate exists. USB bus/port and device node are supplemental diagnostics; they are never first-match authority.
 
-WSL2 is not the production shutdown agent. It is used to develop, test, deploy, query port 3493, and inspect the router over SSH.
+Tests cover:
 
-Typical checks from WSL2:
+- reboot;
+- cable removal/reinsert;
+- device-node and bus/port change;
+- duplicate compatible devices;
+- replacement UPS;
+- wrong/missing serial;
+- driver restart breaker.
 
-```sh
-ssh admin@nutmerlin-ac3100
-nc -vz nutmerlin-ac3100 3493
-upsc ups@nutmerlin-ac3100
-```
+NUTMerlin never automatically substitutes dummy-ups when the real USB source fails.
 
-Use the native Windows client for service-start and actual shutdown tests.
+## 9. Harmless physical UPS report
+
+For the first public report:
+
+1. Confirm exact UPS, driver profile, NUT, router, and addon identity.
+2. Begin with read-only driver/upsd/upsc only.
+3. Confirm stable OL.
+4. Remove utility input briefly while keeping low-risk loads connected; confirm OB.
+5. Restore input before deep discharge; confirm recovery.
+6. Exercise either NUT stale behavior or USB disconnect/reconnect.
+7. Confirm stable unique identity and no routing/log/process fault.
+8. Record structured results and redacted diagnostics.
+
+Do not:
+
+- create a writable NUT administrative credential;
+- run upscmd or upsrw;
+- test load.off, shutdown.*, outlet, output cycle, or delayed power;
+- deep-discharge the battery;
+- use network infrastructure or important storage as a sacrificial load;
+- infer reliability of every numeric field from the base report.
+
+Field-specific runtime/charge qualification is a separate controlled report and should use replay for subsequent policy testing.
+
+## 10. Windows and WSL roles
+
+The runtime Windows pattern is:
+
+    UPS -> NUT server on ASUS router -> native Windows NUT secondary -> local Windows shutdown
+
+WSL2 is used for development, package tests, deployment, SSH, and NUT query. It is not the native Windows shutdown agent.
+
+Direct USB attachment to WSL through usbipd-win is optional experiment infrastructure. The device cannot simultaneously belong to PowerPanel, a native client, and a WSL NUT driver; this path must not become a dependency.
+
+Client testing progresses from:
+
+1. read-only connection;
+2. secondary authentication;
+3. harmless local marker;
+4. short-outage cancellation;
+5. long-outage local action;
+6. optional actual shutdown under NUTMERLIN_ALLOW_HOST_SHUTDOWN=1.
+
+Client disconnect is never treated as proof that Windows is Off. Hibernation is Later.
+
+## 11. Report handling and community hardware
+
+Community reports use the same structured runner and evidence requirements as maintainer reports. A partial or anecdotal success may be published as community experience but does not confer qualification.
+
+Public reports and support bundles:
+
+- remove device serials and usernames where not needed;
+- generalize LAN addresses/prefixes;
+- pseudonymize target labels/IDs;
+- contain no credentials, private keys, bearer/HMAC data, or reusable production endpoint;
+- state every skipped test and the exact claim boundary.
+
+A reproducible negative report is actionable evidence. It can revoke an exact qualification or establish known incompatibility without deleting the historical positive report for the old combination.

@@ -8,14 +8,15 @@ Build NUTMerlin as a safe Asuswrt-Merlin integration layer around Entware-provid
 
 Before changing code, read:
 
-1. `requirements.md`
-2. `architecture.md`
-3. `security.md`
-4. `testing.md`
-5. `hardware.md` and `development.md`
-6. The relevant ADRs under `decisions/`
+1. `CONTEXT.md`
+2. `requirements.md`
+3. `architecture.md`
+4. `security.md`
+5. `testing.md`
+6. `hardware.md` and `development.md`
+7. The relevant ADRs under `decisions/`
 
-When requirements conflict, safety and explicit acceptance criteria take precedence.
+Accepted ADRs control when a summary is less precise. When requirements still conflict, safety and explicit acceptance criteria take precedence.
 
 
 ## Maintainer environment and hardware policy
@@ -36,17 +37,22 @@ When requirements conflict, safety and explicit acceptance criteria take precede
 - Do not patch or replace firmware files permanently.
 - Use Merlin Addons API and user-script hooks.
 - Keep substantial logic in `/jffs/addons/nutmerlin`; insert only small dispatch blocks into `/jffs/scripts/*`.
-- Treat `/opt` as Entware-backed persistent storage that may be absent or mounted late.
+- Treat healthy preexisting Entware as a shared prerequisite; never bootstrap, format, repair, or own Entware.
+- Treat `/opt` as fallible persistent storage that may be absent, late, read-only, or replaced.
 - Avoid frequent writes to JFFS or Entware media; no persistent write on every UPS poll.
 - Never store secrets in `custom_settings.txt`, JavaScript, generated status pages, logs, or command-line arguments where avoidable.
-- Bind NUT to selected trusted interfaces only.
-- Never expose NUT or addon control endpoints to WAN by default.
-- Never enable `load.off`, `shutdown.*`, PDU outlet-off, Redfish `ForceOff`, or equivalent destructive commands by default.
+- Bind NUT to one explicitly confirmed trusted IPv4 scope by default and verify both listener and firewall admission.
+- Never expose NUT to WAN by default, and expose no standalone addon-management listener through P2.
+- Do not register `load.off`, `shutdown.*`, PDU outlet control, Redfish `ForceOff`, restoration, or equivalent abrupt/output operations through P2.
 - Do not use NUT FSD as a cancelable outage timer.
+- Production FSD remains unavailable until its complete lifecycle is separately accepted and qualified.
 - Distinguish reversible outage actions from committed shutdown actions.
+- Use one authoritative real UPS source through P2; keep `dummy-ups` distinct, loopback-only, and unable to inherit production authority.
 - Do not assume a UPS reports reliable runtime, charge, voltage, or load values.
 - Do not assume a client disconnect proves the operating system has powered off.
-- The addon must remain client-neutral; WinNUT is one supported client, not a runtime dependency.
+- The addon must remain client-neutral; WinNUT is one client example, not a runtime dependency or router-side executor.
+- Fresh installs and upgrades remain monitoring-only.
+- No transport may downgrade identity, encryption, protocol version, or address scope automatically.
 
 ## Safety rules for tests
 
@@ -55,10 +61,10 @@ When requirements conflict, safety and explicit acceptance criteria take precede
 - Real-router tests must use `dummy-ups` unless the test explicitly requires the real UPS.
 - Real-UPS tests begin read-only.
 - Real-router tests must tolerate missing or read-only `/opt` without destructive action.
-- No automated test may issue an UPS output-off command.
+- No automated test may issue a UPS output-off command.
 - Tests that can shut down a host must require an explicit environment variable or physical confirmation gate.
 - Test scripts must refuse to run destructive stages when the target is the production router unless an override is supplied.
-- A failed or ambiguous policy must fail closed: log and avoid destructive action.
+- A failed or ambiguous source, policy, binding, action, storage, network, or ownership state must fail closed.
 
 Suggested gate names:
 
@@ -68,7 +74,7 @@ NUTMERLIN_ALLOW_UPS_COMMANDS=1
 NUTMERLIN_ALLOW_PRODUCTION_ROUTER=1
 ```
 
-`NUTMERLIN_ALLOW_UPS_COMMANDS` must not authorize output-off commands until a later project phase explicitly adds and tests that capability.
+`NUTMERLIN_ALLOW_UPS_COMMANDS` does not register or authorize any output-control operation through P2.
 
 ## Implementation shape
 
@@ -76,24 +82,26 @@ Prefer small modules with narrow interfaces:
 
 - platform detection
 - Entware/package management
-- NUT configuration generation
-- service lifecycle
+- ownership and release lifecycle
+- immutable NUT configuration generation
+- NUT source/service lifecycle
 - status collection
 - policy evaluation
-- executor dispatch
-- web UI adapter
-- audit logging
+- action coordination and execution broker
+- optional web UI adapter
+- operational history and safety journal
 
-Keep policy evaluation independent from Merlin and NUT process management so it can be unit-tested on a normal Linux host.
+Keep policy evaluation independent from Merlin and NUT process management so it can be unit-tested on a normal Linux host. Keep privileged lifecycle and broker operations separate from unprivileged status, policy, and UI work.
 
 ## Configuration
 
-- Generate NUT configuration from a validated internal model.
-- Use atomic writes: write temporary file, validate, set ownership/mode, then rename.
-- Back up the last known-good generated configuration.
+- Generate complete immutable NUT configuration generations from a validated internal model.
+- Render into a new private generation, validate, set ownership/mode, hash/seal, and atomically select it.
+- Resolve one exact generation per service epoch and set `NUT_CONFPATH` for every managed NUT process.
+- Retain only active and last-known-good sealed generations after staging.
 - Preserve user-owned files unless NUTMerlin created and tracks them.
 - Refuse ambiguous ownership rather than overwriting a preexisting manual NUT deployment.
-- Validate all hostnames, addresses, usernames, commands, paths, durations, thresholds, and identifiers.
+- Validate all hostnames, addresses, usernames, typed operation values, paths, durations, thresholds, and identifiers.
 - Never interpolate untrusted input into a shell command.
 - Store complex target and policy data in dedicated files under `/jffs/addons/nutmerlin` or `/opt/etc/nutmerlin`, not in the shared 8 KB addon settings store.
 
@@ -115,13 +123,15 @@ Execution results must include:
 - target ID
 - policy ID
 - event ID
+- policy and operation version
 - start and finish timestamps
 - dry-run flag
 - exit/result status
 - retry count
+- evidence grade
 - redacted diagnostic message
 
-Do not expose arbitrary shell execution through the normal web UI. The local-script executor may reference administrator-created scripts from an allowlisted directory.
+Do not expose arbitrary shell execution through the UI or CLI. Shutdown-client onboarding is not an executor. Local scripts are imported immutable POSIX-shell artifacts and are available only on platform profiles that qualify unprivileged execution, resource/process containment, and no network egress without root fallback.
 
 ## Coding and test quality
 
@@ -144,13 +154,16 @@ Update requirements, architecture, security, tests, and ADRs when behavior chang
 
 ## Open questions
 
-Do not invent answers for unresolved product decisions. Record them in `backlog.md` or an ADR. Initial unresolved items include:
+Do not invent answers for unresolved product decisions. Record research in `backlog.md`; create a new ADR under `decisions/` only when a hard-to-reverse trade-off is actually settled. Current unresolved subjects include:
 
-- minimum supported current Merlin firmware generation for public releases
-- minimum supported Entware architecture/package versions
-- UI placement and visual conventions
-- long-term update channel and signing model
-- whether central policy scheduling belongs in the MVP
+- two independent release-root fingerprint publication channels and emergency root replacement
+- platform evidence for same-boot clock synchronization and Merlin web nonce integration
+- platform qualification for unprivileged/no-egress local scripts
+- optional NUT TLS interoperability
+- a reproducible Entware WinRM client stack and target Off verification
+- Redfish BMC roles that permit GracefulShutdown while denying broader power authority
+- additional NUT driver and non-ext4 storage profiles
+- the separately deferred production FSD, output control, restoration, direct SNMP/PDU, multi-source, scheduling, and catalog models
 
 ## Agent skills
 

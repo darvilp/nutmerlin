@@ -13,11 +13,11 @@ Use layered testing:
 
 1. host tests with Merlin command/filesystem shims
 2. NUT integration tests with `dummy-ups`
-3. optional AArch64/Entware user-mode smoke tests
+3. required current AArch64/Entware package and ABI release evidence under ADR 0064
 4. optional RT-AC3100 as the legacy Merlin 386/ARMv7 lifecycle rig
 5. primary router and real UPS for manually gated integration
 
-Full firmware rehosting remains optional research.
+ARMv7 user-mode execution and full firmware rehosting remain optional research or legacy evidence.
 
 ## Consequences
 

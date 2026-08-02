@@ -1,467 +1,642 @@
 # NUTMerlin requirements
 
-## 1. Product scope
+## 1. Authority, scope, and milestones
 
-NUTMerlin shall provide a supported, user-friendly method to run Network UPS Tools on Asuswrt-Merlin using Entware and to expose normalized UPS events to standard clients and optional orchestration executors.
+NUTMerlin shall be a community Asuswrt-Merlin integration layer around Entware-provided Network UPS Tools. NUT owns UPS device communication and the NUT network protocol. NUTMerlin owns safe installation, validated configuration, lifecycle integration, status normalization, client onboarding, optional policy evaluation, and qualified executor dispatch.
 
-Confirmed reference hardware includes a CyberPower `CP1500PFCLCD`, an RT-AX86U Pro production router, and an optional RT-AC3100 legacy integration router. The product remains device-neutral and shall not hard-code this hardware.
+The controlling design records are:
+
+- root CONTEXT.md for terminology;
+- accepted ADRs under decisions/ for architectural decisions;
+- decision-ledger.md as the interview closeout index.
+
+When a summary in this file is less precise than an ADR, the ADR controls. The milestones are capability and evidence boundaries, not dates:
+
+- P0: public safe NUT core and client-local shutdown onboarding;
+- optional P0 component: version-matched curated Merlin WebUI;
+- P1: common notification and graceful orchestration;
+- P2: independently qualified native graceful adapters;
+- Later: separately governed high-risk or broad-scope capabilities.
 
 NUTMerlin is not:
 
-- a replacement for NUT drivers or protocol handling
-- a cloud monitoring service
-- a generic remote-command platform
-- a guarantee that every UPS reports correct telemetry
-- a substitute for device-specific shutdown testing
+- a replacement UPS protocol or driver implementation;
+- a cloud monitoring service;
+- a general remote-command or router-management platform;
+- a guarantee that every NUT variable is reliable;
+- a promise of support for every router model, UPS, filesystem, or old package;
+- a path to UPS/PDU output control, abrupt host power, or automatic restoration through P2.
 
-Priority labels:
+### REQ-SCOPE-001 — Client neutrality (P0)
 
-- **P0** — MVP/release blocker
-- **P1** — common follow-on capability
-- **P2** — backlog capability
-- **Later** — specialized or enterprise integration
+The addon shall remain client-neutral. A standard NUT upsmon secondary is the P0 shutdown pattern; Windows, WinNUT, WSL2, and the maintainer’s own PC are examples rather than runtime dependencies.
+
+### REQ-SCOPE-002 — Monitoring-only default (P0)
+
+A fresh install and an upgrade shall enable no policy, central executor, shutdown-client credential, webhook, MQTT binding, outage timer, telemetry-loss fail-safe, production FSD workflow, or writable device operation.
+
+### REQ-SCOPE-003 — No dangerous early registry entries (P0–P2)
+
+The installed operation registry through P2 shall contain no power_abrupt or output_control operation. A generic checkbox, confirmation, environment variable, dry-run, or credential shall not create such authority.
 
 ## 2. Supported deployment patterns
 
-### REQ-PATTERN-001 — Network UPS server (P0)
+### REQ-PATTERN-001 — Network UPS server and client-local shutdown (P0)
 
-The router shall run the UPS driver and NUT data server. Independent clients shall be able to monitor status and apply their own shutdown policy.
+The router shall run one qualified NUT driver source and upsd. Independent clients may read status and, after explicit registration, authenticate as restricted upsmon secondaries that own their local delay, cancellation, threshold, and shutdown command.
 
-### REQ-PATTERN-002 — Coordinated NUT shutdown (P1)
+NUTMerlin shall not claim that it dispatched or verified a client-local shutdown.
 
-The addon shall support an advanced committed primary/secondary NUT shutdown workflow, including FSD, without presenting it as a cancelable outage timer.
+### REQ-PATTERN-002 — Notification-only policy (P1)
 
-### REQ-PATTERN-003 — Agentless push (P1)
+A policy may publish a normalized notification through a fixed webhook or publish-only MQTT profile without enabling a target-state action. Delivery acceptance shall not be represented as target-state verification.
 
-The addon shall support centrally initiated actions through pluggable executors, beginning with SSH.
+### REQ-PATTERN-003 — Graceful central orchestration (P1)
 
-### REQ-PATTERN-004 — Platform-native and out-of-band actions (P2)
+Restricted SSH and qualified local-script bindings may perform typed, explicitly activated graceful service or host operations. Policies may sequence exact target/action snapshots with prerequisites and protected infrastructure.
 
-The executor model shall allow later WinRM, Redfish, SNMP/PDU, and platform-specific actions.
+### REQ-PATTERN-004 — Native graceful adapters (P2)
 
-### REQ-PATTERN-005 — Alerts only (P1)
+WinRM host.graceful_shutdown and Redfish GracefulShutdown may be advertised only when each complete adapter, transport, target privilege, and verifier contract is independently qualified.
 
-A user shall be able to publish events without enabling shutdown actions.
+### REQ-PATTERN-005 — Production FSD (Later)
 
-### REQ-PATTERN-006 — Load shedding (P1)
+Production NUT FSD shall remain unavailable until a complete primary/router, secondary-client, durable commitment, UPS power-down, restoration, and exact-hardware workflow is accepted and qualified. P1 may provide only a harmless isolated FSD simulation.
 
-A user shall be able to stage actions by priority and threshold while preserving excluded infrastructure.
+### REQ-PATTERN-006 — Deferred broad and destructive scope (Later)
 
-## 3. Platform and installation
+UPS/PDU output off, cycle, delay, stay-off, return, writable UPS administration, Redfish ForceOff/reset/power-on, target restoration, direct SNMP/PDU, hibernation, multiple or redundant sources, calendar scheduling, inbound control protocols, specialized platform APIs, and built-in cloud/email/mobile services require later decisions.
 
-### REQ-PLAT-001 — Merlin detection (P0)
+## 3. Platform support and qualification
 
-The installer shall verify that the device runs Asuswrt-Merlin and exposes the Addons API before installing the UI.
+### REQ-SUP-001 — Current Merlin families (P0)
 
-### REQ-PLAT-002 — Entware detection (P0)
+The intended support contract shall cover AArch64 3004.388.x and 3006.102.x. Within each family, only the latest NUTMerlin-qualified upstream stable release is supported.
 
-The installer shall detect Entware, its mount path, package architecture, package manager availability, and writeability.
+A newly published stable release shall not inherit qualification. The previously qualified release remains supported until the new release qualifies; qualification then moves without a retirement grace period. Earlier releases are compatibility-only.
 
-### REQ-PLAT-003 — Dependency management (P0)
+### REQ-SUP-002 — Capability-based platform eligibility (P0)
 
-The installer shall install only required Entware packages and shall record which packages it installed.
+Mandatory preflight probes shall determine whether a router environment satisfies the supported platform contract. A hard-coded model allowlist shall not be the eligibility authority.
 
-### REQ-PLAT-004 — Existing NUT deployment protection (P0)
+Known-incompatible evidence shall override general eligibility and fail closed for the affected capability or installation.
 
-If a preexisting NUT configuration is detected and ownership is ambiguous, the installer shall stop or enter an explicit import/adopt workflow. It shall not silently overwrite manual configuration.
+### REQ-SUP-003 — Exact hardware qualification (P0)
 
-### REQ-PLAT-005 — Idempotency (P0)
+Exact router model and hardware revision qualification shall require one complete, reproducible, waiver-free hardware report. The report shall identify the exact router, firmware, architecture, Entware feed and packages, addon, storage profile, and structured non-destructive results.
 
-Install, repair, upgrade, and uninstall operations shall be safe to repeat.
+Qualification may carry forward only when a release records that no relevant platform-facing behavior or dependency changed. It has no calendar expiry. A supported firmware change, hardware revision, feed/ABI change, NUT major/minor change, relevant addon platform change, security advisory, or reproducible fault triggers fresh evidence. Reproducible negative evidence revokes the affected qualification until fixed and retested.
 
-### REQ-PLAT-006 — Late `/opt` mount (P0)
+### REQ-SUP-004 — Legacy best-effort (P0)
 
-Service startup shall tolerate Entware storage being absent or mounted after base router services.
+Merlin 386/ARMv7 and the RT-AC3100 shall be legacy best-effort only. No normal CI, pull request, release, or core capability shall wait for that hardware.
 
-### REQ-PLAT-007 — Clean uninstall (P0)
+### REQ-SUP-005 — Development environment neutrality (P0)
 
-Uninstall shall remove only project-owned files, hook blocks, firewall rules, and optionally project-installed packages after confirming they are unused.
+The maintainer workflow may use Codex IDE beta and WSL2, but host tests shall run on a normal Linux environment. The working tree should reside on a Linux filesystem rather than /mnt/c for Linux-tool workflows.
 
-### REQ-PLAT-008 — Recovery (P0)
+### REQ-SUP-006 — Layered release evidence (P0)
 
-A documented CLI recovery path shall work when the web page fails to mount.
+Host conformance tests shall run for every change. Every release shall execute the exact current AArch64 Entware package/ABI cohort used by supported platforms.
 
+The first public release shall also have:
 
-### REQ-PLAT-009 — Hardware-optional development (P0)
+- at least one complete exact current-family router report; and
+- at least one harmless physical UPS base report covering OL, short OB/recovery, stale or disconnect/reconnect, and stable identity.
 
-The repository's normal lint, unit, NUT simulation, security, and packaging checks shall run without an ASUS router or physical UPS.
+Later hardware evidence shall refresh on the risk triggers in REQ-SUP-003. ARMv7 evidence is nonblocking.
 
-### REQ-PLAT-010 — Explicit router profiles (P0)
+## 4. Entware, ownership, and lifecycle
 
-Hardware deployment shall use named profiles. A production profile shall require an explicit override, while the RT-AC3100 profile shall be classified as optional legacy test hardware.
+### REQ-PLAT-001 — Preexisting healthy Entware prerequisite (P0)
 
-### REQ-PLAT-011 — Legacy capability detection (P0)
+NUTMerlin shall require a preexisting, mounted, writable, supported-architecture Entware installation with a healthy opkg database and feed configuration.
 
-The addon shall detect architecture, firmware capabilities, Addons API support, Entware feed, available commands, firewall implementation, and USB behavior rather than assuming parity between Merlin 386 and current branches.
+NUTMerlin shall not install Entware, choose or format storage, change feed configuration, repair the shared package database, or claim ownership of /opt.
 
-### REQ-PLAT-012 — Development environment neutrality (P0)
+### REQ-PLAT-002 — Scoped current-feed dependency management (P0)
 
-WSL2 is the primary maintainer environment, but runtime and host tests shall remain compatible with a normal Linux environment.
+The supported Entware feed’s current coherent package cohort shall be the gold standard.
 
-## 4. UPS and NUT management
+NUTMerlin shall:
 
-### REQ-NUT-001 — USB HID MVP (P0)
+- inspect versions before mutation;
+- never run a blanket opkg upgrade;
+- leave compatible required packages unchanged;
+- present an exact package plan;
+- mutate only required packages and coherent NUT components;
+- install optional dependencies only when their capability is enabled;
+- never silently downgrade, pin, vendor, or fetch a private NUT build;
+- record package versions and provenance.
 
-The MVP shall support one locally attached UPS through `usbhid-ups`, subject to NUT device compatibility.
+An interactive install shall default to upgrading a coherent older compatible cohort, while permitting explicit compatibility-only preservation after required probes. Unattended mutation shall require an explicit dependency policy. Mixed, incomplete, vulnerable, or known-unsafe cohorts shall be refused or repaired within the declared cohort.
 
-### REQ-NUT-002 — Simulation (P0)
+### REQ-PLAT-003 — Transaction headroom (P0)
 
-The addon shall support `dummy-ups` as a first-class source for development, demonstrations, and troubleshooting.
+Package and release mutation shall require conservatively calculated transaction and temporary space plus at least 16 MiB of post-transaction safety headroom. Mutation shall be refused when the requirement cannot be calculated safely.
 
-### REQ-NUT-003 — Configuration generation (P0)
+### REQ-PLAT-004 — Foreign deployment refusal (P0)
 
-The addon shall generate valid `ups.conf`, `upsd.conf`, and `upsd.users` content from validated settings.
+NUTMerlin shall not adopt, merge, overwrite, stop, or uninstall a foreign NUT deployment. Missing or inconsistent ownership evidence shall be treated as ambiguous ownership and refused.
 
-### REQ-NUT-004 — Atomic activation (P0)
+### REQ-PLAT-005 — Conservative ownership recovery (P0)
 
-Generated configuration shall be validated and activated atomically with a last-known-good rollback.
+Ownership recovery shall be a separate explicit operation. It may reconstruct an ownership manifest only from complete, mutually consistent NUTMerlin evidence and shall never infer ownership merely from familiar paths or contents.
 
-### REQ-NUT-005 — Service lifecycle (P0)
+### REQ-PLAT-006 — Authenticated first install (P0)
 
-The addon shall start, stop, restart, and report health for the configured driver and `upsd`.
+First install shall use a locally staged authenticated bundle. Before project code executes, the administrator shall independently confirm the full OpenPGP root fingerprint, verify the signed manifest, and verify every installer and artifact size/hash.
 
-### REQ-NUT-006 — Status query (P0)
+Streaming network content into a shell and trusting a key first encountered beside the candidate shall be prohibited.
 
-The addon shall use NUT interfaces such as `upsc` rather than parsing USB HID data itself.
+### REQ-PLAT-007 — Journaled two-slot lifecycle (P0)
 
-### REQ-NUT-007 — Unknown telemetry (P0)
+Install and update shall stage the complete selected component set separately from the active slot, record durable phases in a bounded update journal, atomically select the candidate, retain current and previous slots only, and permit one automatic rollback attempt. Every slot contains the core and contains the WebUI only when explicitly selected.
 
-Missing, stale, malformed, or known-unreliable telemetry shall be represented as unknown. It shall not be coerced to zero.
+A failed rollback shall close NUTMerlin action and network surfaces, preserve both slots and diagnostics, and require local CLI recovery without disrupting core router services.
 
-### REQ-NUT-008 — Administrative command separation (P0)
+### REQ-PLAT-008 — User-initiated updates (P0)
 
-Read-only monitoring and administrative NUT commands shall use separate capabilities and credentials.
+Update discovery, download, staging, and activation shall require an explicit administrator session. NUTMerlin shall never install an update silently.
 
-### REQ-NUT-009 — No default load control (P0)
+### REQ-PLAT-009 — Safe update window (P0)
 
-UPS output-off, delayed load-off, `shutdown.return`, `shutdown.stayoff`, and equivalent commands shall be disabled by default and absent from the primary UI.
+Normal activation shall require confirmed OL, healthy writable storage and journal, correct network/privilege gates, and no active episode, pending state-changing action, committed sequence, unknown outcome, storage fault latch, or unresolved reconciliation.
 
-### REQ-NUT-010 — Multi-UPS extensibility (Later)
+Maintenance activation may use isolated dummy-ups only after explicit disablement. Policies, executors, shutdown-client service, and external NUT access shall remain closed after validation until the real source is resolved and the administrator explicitly enables the addon.
 
-The internal model shall not prevent later multi-UPS support, but the MVP may support exactly one source.
+Candidate health shall require at least 120 continuous healthy seconds and 24 consecutive fresh observations at the default interval. Every migration shall retain a validated representation usable by the previous release.
 
-## 5. Persistent storage and durability
+### REQ-PLAT-010 — Rollback quarantine (P0)
 
-### REQ-STOR-001 — Persistent Entware storage (P0)
+Rollback shall restore only the authenticated previous release paired with its compatible last-known-good configuration and shall begin monitoring-only.
 
-A real-router installation shall require a supported persistent `/opt` storage device. Merlin firmware installation itself shall not require external storage.
+The restored slot shall reconcile exact ownership, journals, credentials, source, configuration, network scope, and policy hashes, then pass the same 120-second/24-observation gate. One automatic rollback may restore exact unchanged previous authority only when no active, committed, unknown, or unreconciled state exists. Manual rollback shall require explicit reactivation.
 
-### REQ-STOR-002 — No swap requirement (P0)
+Rollback shall never restore a revoked credential, erase an unknown outcome, reopen a retry budget, or oscillate versions automatically.
 
-The MVP shall not require or automatically create swap.
+### REQ-PLAT-011 — Disable, uninstall, and emergency detach (P0)
 
-### REQ-STOR-003 — Write minimization (P0)
+Disable shall close actions and managed network surfaces while retaining installation and data.
 
-The addon shall not persist a record on every UPS poll. High-frequency status shall remain in volatile storage; persistent writes shall be limited to configuration, migrations, event transitions, and bounded audit records.
+Clean uninstall shall remove all verified NUTMerlin-owned code, configuration, secrets, journals, history, hooks, and firewall state, but shall retain all Entware packages and every foreign artifact.
 
-### REQ-STOR-004 — Bounded logs (P0)
+Clean uninstall shall refuse while work is in flight, committed, unknown, unreconciled, ambiguously owned, or unwritable. It shall have no force mode. When /opt is broken, emergency detach may remove only independently verified JFFS activation hooks and exposure while preserving ownership evidence and inaccessible data for later cleanup; it shall not claim clean removal.
 
-Persistent logs shall have explicit size/age limits and rotation. Logs shall not be written frequently to JFFS.
+### REQ-PLAT-012 — Late mount versus runtime storage loss (P0)
 
-### REQ-STOR-005 — Storage failure handling (P0)
+Boot readiness shall check /opt after 5, 15, 30, 60, and 120 seconds, then every 300 seconds while enabled and unavailable.
 
-Missing, read-only, unexpectedly unmounted, or failed `/opt` storage shall produce a clear degraded state and shall not trigger destructive policy actions.
+Unexpected runtime loss, replacement, read-only transition, or integrity failure of the active storage shall latch state-changing automation until deterministic reconciliation and explicit administrator clear. Read-only monitoring may resume automatically only when its own authority is intact.
 
-### REQ-STOR-006 — Reproducibility and backup (P0)
+### REQ-PLAT-013 — Optional version-matched WebUI component (P0)
 
-A user shall be able to export non-secret configuration and reproduce the installation on replacement media.
+The required core component shall contain all runtime services, persistent state, lifecycle and recovery behavior, management authority, and the complete local CLI. A core-only installation shall be fully supported and shall be the first-install default.
 
-### REQ-STOR-007 — Media diagnostics (P1)
+The WebUI shall be a separately authenticated optional artifact in the same signed release and version as the core. It shall require a healthy exact-version core, shall not install or operate standalone, and shall add no independent listener, controller, state model, or update channel.
 
-Diagnostics shall report filesystem, mount options, free space, read-only state, recent storage-related errors where available, and whether SMART passthrough is available. The addon shall not claim to determine remaining USB-flash endurance when the device exposes no reliable health data.
+WebUI install and removal shall be explicit ownership-checked lifecycle operations. Removal shall invalidate outstanding web nonces and remove only verified UI registration, assets, and transient UI state while preserving core services, configuration, credentials, policies, journals, history, and CLI access. Full core uninstall shall remove any installed WebUI under the clean-uninstall contract.
 
-## 6. Networking
+Updates shall preserve the selected component set and shall never serve a WebUI whose release or management schema differs from the active core. If a matching WebUI cannot be staged, the administrator shall explicitly postpone the core update or approve UI removal; unattended removal requires an operation-specific authorization. Rollback shall restore only an authenticated matching UI or leave it absent.
 
-### REQ-NET-001 — LAN-only default (P0)
+## 5. UPS sources and NUT configuration
 
-`upsd` shall bind only to explicitly selected trusted LAN addresses by default.
+### REQ-NUT-001 — One authoritative source (P0)
 
-### REQ-NET-002 — WAN prohibition (P0)
+Through P2, an installation shall have exactly one authoritative real UPS source. Its default client-facing NUT name shall be ups.
 
-The installer shall not create WAN exposure. It shall warn or refuse when a selected listener appears WAN-facing.
+NUTMerlin shall not aggregate, vote, or automatically fail over between real sources.
 
-### REQ-NET-003 — Guest isolation (P0)
+### REQ-NUT-002 — Isolated simulation (P0)
 
-Guest and untrusted VLAN access shall be denied unless explicitly enabled.
+dummy-ups shall use a visibly distinct maintenance identity and loopback-only listener. External clients, policies, and executors shall be disabled for the simulated source. NUTMerlin shall never switch a failed real source to simulation automatically.
 
-### REQ-NET-004 — Firewall lifecycle (P0)
+### REQ-NUT-003 — Versioned driver profiles (P0)
 
-Firewall rules shall be reapplied through Merlin hooks and removed on disable/uninstall.
+P0 shall define closed, versioned profiles for usbhid-ups and isolated dummy-ups. A profile shall own typed options, identity constraints, privilege, rendering, lifecycle, harmless probes, and migrations.
 
-### REQ-NET-005 — Address changes (P0)
+The CLI and any installed WebUI shall not accept an arbitrary driver name, raw ups.conf content, or an expert bypass. Additional drivers require separately accepted profiles.
 
-The addon shall detect or recover from LAN address changes without leaving stale broad listeners or firewall rules.
+### REQ-NUT-004 — Unique stable USB identity (P0)
 
-### REQ-NET-006 — Client onboarding (P0)
+A USB source shall bind only when validated VID/PID/serial identity resolves to exactly one device. A qualified no-serial profile may use exact stable attributes only when exactly one candidate exists. Bus and port are supplemental diagnostics, never sole or first-match authority.
 
-The UI and CLI shall display:
+### REQ-NUT-005 — Immutable complete configuration generations (P0)
 
-- server address
-- port
-- UPS name
-- authentication requirements
-- client-neutral setup notes
-- optional WinNUT guidance
+NUTMerlin shall render complete, immutable, hashed, permissioned NUT configuration generations outside ambient /opt/etc/nut.
 
-## 7. User interface and diagnostics
+Every managed process in a service epoch shall resolve one validated generation ID and use NUT_CONFPATH. Candidate activation shall close exposure, change one atomic selector, restart the full affected stack, and reopen access only after validation.
 
-### REQ-UI-001 — Merlin integration (P0)
+At most active and last-known-good generations shall be retained after staging. Generation activation shall require 120 continuous healthy seconds and at least 24 fresh observations and shall receive one rollback attempt.
 
-The addon shall use the Merlin Addons API and service-event mechanism rather than modifying firmware source.
+NUTMerlin shall refuse missing, modified, unsealed, symlinked, ownership-inconsistent, or future-schema generations rather than adopt them.
 
-### REQ-UI-002 — Status dashboard (P0)
+### REQ-NUT-006 — NUT lifecycle and bounded recovery (P0)
 
-The dashboard shall show available values for:
+NUTMerlin shall manage and report health for the configured driver and upsd without permanently replacing firmware files.
 
-- UPS state
-- battery charge
-- estimated runtime
-- load
-- input voltage
-- model
-- driver
-- service health
-- listener address
-- simulation/real source
+Driver/service recovery shall permit no more than three starts in five minutes, delayed 5, 15, and 60 seconds, then pause for 15 minutes and permit one probe. The breaker shall reset only after five continuous healthy minutes.
 
-### REQ-UI-003 — Safe actions (P0)
+### REQ-NUT-007 — NUT interfaces, not USB parsing (P0)
 
-The UI shall provide validation, connection test, restart, refresh, and diagnostics actions.
+Status collection shall use NUT interfaces such as upsc and shall not implement USB HID parsing or vendor UPS protocols.
 
-### REQ-UI-004 — Destructive action isolation (P0)
+### REQ-NUT-008 — No writable administration (P0–P2)
 
-The normal dashboard shall not provide one-click UPS output-off or forced host shutdown.
+NUTMerlin shall expose no raw upscmd, upsrw, beeper, battery test, calibration, outlet, shutdown.*, load.off, or other writable UPS/PDU operation through P2 and shall hold no general UPS administrative credential.
 
-### REQ-UI-005 — Redaction (P0)
+## 6. NUT networking and shutdown clients
 
-The UI and diagnostics exports shall redact credentials, tokens, private keys, sensitive headers, and command content as appropriate.
+### REQ-NET-001 — Exact trusted-LAN scope (P0)
 
-### REQ-UI-006 — Bounded settings store (P0)
+The default external NUT scope shall be one administrator-confirmed IPv4 source subnet and one exact router LAN listener address. TCP port 3493 shall be admitted only from that scope.
 
-Only compact settings shall use Merlin's shared addon settings storage. Complex policies, targets, and secrets shall use project-owned files.
+WAN, guest, VPN-client, other VLAN/subnet, wildcard, and router-administration exposure shall be denied by default.
 
-### REQ-UI-007 — Accessible CLI parity (P0)
+### REQ-NET-002 — IPv6 default-off (P0)
 
-Core install, status, validate, repair, logs, enable, disable, and uninstall operations shall be available through CLI.
+No IPv6 NUT listener or admission rule shall exist by default. Explicit opt-in shall require a specific trusted LAN address and source prefix, verified denial from untrusted interfaces, and administrator confirmation. Prefix or scope ambiguity shall remove stale rules and disable IPv6 access.
 
-## 8. Event and policy model
+### REQ-NET-003 — Network exposure gate (P0)
 
-### REQ-POL-001 — Normalized events (P0)
+External NUT access shall open only when the effective listener and independently verified firewall source scope agree exactly.
 
-The policy engine shall normalize at least:
+The gate shall be checked at activation, service restart, relevant firewall hook, and at least every 300 seconds. Drift shall close exposure rather than broaden it.
 
-- `online`
-- `on_battery`
-- `low_battery`
-- `runtime_below`
-- `charge_below`
-- `communication_lost`
-- `communication_restored`
-- `overload`
-- `replace_battery`
-- `forced_shutdown`
+### REQ-NET-004 — Read-only status access (P0)
 
-### REQ-POL-002 — Delayed reversible action (P0)
+Credential-free read-only NUT status may be available inside the confirmed trusted-LAN scope. It shall convey no addon management, shutdown, FSD, SET, or instant-command authority.
 
-A policy shall be able to start a timer on an event and cancel it when a specified recovery event occurs.
+### REQ-NET-005 — Independent secondary-client onboarding (P0)
 
-### REQ-POL-003 — Threshold actions (P1)
+Fresh installation shall create no shutdown credential. Explicit registration shall create one independently generated credential granting exactly one client only the upsmon secondary role and shall show client-neutral connection/configuration guidance.
 
-Policies shall support runtime and battery-charge thresholds only when those values are available and valid.
+NUTMerlin shall never grant upsmon primary, FSD, SET, or instant-command authority through this flow.
 
-### REQ-POL-004 — Ordered groups (P1)
+### REQ-NET-006 — Native credential transport (P0)
 
-Policies shall support ordered target groups and per-stage delays.
+Native non-TLS NUT secondary credentials may be used only within the confirmed trusted LAN. Verified NUT TLS may be offered as a separately qualified optional profile. There shall be no automatic transport downgrade.
 
-### REQ-POL-005 — Retry and timeout (P1)
+### REQ-NET-007 — Credential lifecycle (P0)
 
-Actions shall support bounded retries and timeouts.
+A generated secret shall be shown only once at creation or replacement. Loss shall require replacement rather than reveal. Credentials shall not expire automatically by age.
 
-### REQ-POL-006 — Error behavior (P1)
+Replacement shall allow at most current and pending versions. The pending window shall default to 24 hours and permit 1–168 hours. Expiry shall remove only the pending credential. Promotion shall require a current harmless test and explicit confirmation.
 
-Policies shall define continue-on-error or stop-on-error behavior.
+Emergency revocation shall immediately inhibit the binding, remove locally held authority when safe, and write a durable non-secret revocation record that update, configuration, and rollback cannot reverse.
 
-### REQ-POL-007 — Idempotency (P0)
+## 7. Observation and policy semantics
 
-A single event episode shall not execute the same non-repeatable action more than once unless retry policy allows it.
+### REQ-OBS-001 — Fresh observations (P0)
 
-### REQ-POL-008 — Restart semantics (P0)
+The default observation interval shall be five seconds. Qualified profiles may use 2–30 seconds.
 
-Policy state after router or service restart shall be deterministic and documented.
+A source shall be stale immediately when NUT says it is stale or after max(15 seconds, 3 times the observation interval) without a fresh successful observation.
 
-### REQ-POL-009 — Commit boundary (P1)
+An action-eligible state shall require two consecutive fresh, mutually consistent observations separated by at least one interval. The first contradictory or recovery observation shall inhibit new dispatch immediately.
 
-Policies shall explicitly distinguish cancelable pending actions from committed shutdown sequences.
+OL plus OB, no recognized line-state token, WAIT, malformed tokens, or a profile-defined contradiction shall normalize to unknown.
 
-### REQ-POL-010 — FSD semantics (P1)
+### REQ-OBS-002 — Qualified numeric telemetry (P1)
 
-FSD shall be labeled noncancelable/latched and shall not be used by default for a short-outage grace period.
+Charge or runtime shall authorize a threshold action only when the exact UPS/driver/profile/NUT capability is qualified, the source is confirmed OB, and two fresh values meet the threshold.
 
-### REQ-POL-011 — Dry run (P0)
+No charge or runtime threshold shall be enabled or prefilled. Charge clear shall default to trip plus 2 percentage points. Runtime clear shall default to trip plus max(60 seconds, 10 percent of trip). A threshold shall fire at most once per outage episode unless a distinct later stage defines another threshold.
 
-Every policy and executor shall support dry-run or harmless test behavior.
+### REQ-OBS-003 — Telemetry-loss behavior (P0/P1)
 
-## 9. Executors
+Stale or unavailable telemetry shall inhibit new ordinary state-changing dispatch. Pending reversible timers may retain same-boot monotonic elapsed time but shall not dispatch until all evidence is fresh and revalidated.
 
-### REQ-EXEC-001 — Executor interface (P0)
+A telemetry-loss fail-safe shall be absent by default. If explicitly activated, it shall require last-confirmed OB and continuous loss for at least max(30 seconds, 2 times the freshness deadline). It may only notify, stop a service gracefully, or request a qualified graceful host shutdown. It shall never invoke FSD, coordinator action, abrupt power, or output control.
 
-Executors shall expose validation, test, execution, verification, and capability description.
+### REQ-POL-001 — Reversible and committed phases (P0)
 
-### REQ-EXEC-002 — Local script (P0)
+The policy model shall distinguish reversible work from committed shutdown. Recovery may cancel only reversible work. FSD shall never be used as a cancelable outage timer.
 
-The addon shall support administrator-created scripts from an allowlisted directory without allowing arbitrary shell text from the UI.
+No outage duration shall be enabled or prefilled. A 180-second workstation delay may appear only as an explicitly configured, clearly labeled example with harmless validation.
 
-### REQ-EXEC-003 — NUT client onboarding (P0)
+### REQ-POL-002 — Immutable policy versions (P0)
 
-The addon shall support the standard pattern where clients poll NUT and shut themselves down.
+An active policy shall be an immutable version containing exact target/action snapshots, operation/schema versions, dependencies, gates, and non-secret credential references.
 
-### REQ-EXEC-004 — SSH (P1)
+Templates and target groups shall be authoring aids only. Changing a group or template shall not alter an active policy. Selecting an old version shall create a new draft and require current validation.
 
-SSH shall support key authentication, host-key verification, restricted commands, timeout, retry, and target-specific templates.
+### REQ-POL-003 — Logical targets and bindings (P0)
 
-### REQ-EXEC-005 — HTTP webhook (P1)
+A target shall represent one logical destination. Protocol endpoints and credentials shall live in separately versioned and qualified bindings.
 
-Webhooks shall support HTTPS verification, bounded timeouts, response policy, redacted headers, and optional signing.
+The active NUTMerlin coordinator shall be structurally excluded from ordinary policies. Network infrastructure shall be protected by default and may appear only in an explicit terminal stage when it is no longer a control-path dependency.
 
-### REQ-EXEC-006 — MQTT (P1)
+### REQ-POL-004 — Typed operations and safety classes (P0)
 
-MQTT shall publish normalized events and results with explicit retained-message behavior and optional TLS.
+Operations shall use closed, versioned structured schemas and declare their maximum credible class:
 
-### REQ-EXEC-007 — NUT FSD (P1)
+- observe;
+- notify;
+- service_graceful;
+- host_graceful;
+- shutdown_committed;
+- power_abrupt;
+- output_control.
 
-Advanced FSD orchestration shall require explicit enablement and shall not imply UPS output shutdown unless separately configured.
+Runtime parameters, executors, scripts, or policies shall not lower the registered class. Enabling one class shall not pre-provision credentials for a higher class.
 
-### REQ-EXEC-008 — WinRM (P2)
+### REQ-POL-005 — Dependencies and conflicts (P1)
 
-The architecture shall allow Windows-native remote shutdown through WinRM/PowerShell Remoting.
+Independent actions shall continue when another independent action fails. Dependencies shall be explicit and acyclic, and a dependent action shall run only when its exact evidence prerequisite is met.
 
-### REQ-EXEC-009 — Redfish (P2)
+Identical simultaneous intents may coalesce. Different overlapping intents shall be rejected unless their relationship is explicit. Numeric priority and a global continue-on-error flag shall not resolve ambiguity.
 
-The architecture shall allow Redfish power-state queries, graceful shutdown, optional verified escalation, and optional restoration actions.
+### REQ-POL-006 — Event-relative time (P0–P2)
 
-### REQ-EXEC-010 — SNMP/PDU (P2)
+Observation freshness, delay, debounce, cancellation, retry, action budget, backoff, rate, and breaker timing shall use monotonic time.
 
-The architecture shall allow capability-scoped SNMP SET or managed PDU actions.
+Through P2, policies shall have no calendar, cron, timezone, sunrise/sunset, or recurring schedule semantics.
 
-### REQ-EXEC-011 — Specialized platforms (Later)
+### REQ-POL-007 — Restart reconciliation (P0)
 
-VMware, Hyper-V, Nutanix, storage, and cluster integrations may be added through executors or external webhooks.
+Every event/result shall carry a boot identity and monotonic position. Same-boot uncommitted timing may resume only from consistent durable state. A router reboot shall restart an uncommitted timer from zero.
 
-## 10. Security
+Committed, accepted, or outcome-unknown work shall never be re-dispatched merely because a process or router restarted.
 
-### REQ-SEC-001 — Least privilege (P0)
+### REQ-POL-008 — Prospective emergency inhibit (P0)
 
-Each service, credential, and executor shall receive only the permissions required.
+An administrator inhibit shall persistently block new episodes, commitments, and dispatch and shall cancel only undispatched reversible work.
 
-### REQ-SEC-002 — Secret storage (P0)
+It shall not recall accepted, unknown, or committed effects. Clearing it shall arm only future new episodes and shall not clear existing unresolved state.
 
-Secrets shall be stored in project-owned files with restrictive permissions and excluded from settings exports.
+## 8. Action and executor contracts
 
-### REQ-SEC-003 — Input safety (P0)
+### REQ-ACT-001 — Executor interface (P0)
 
-All user input shall be validated and safely encoded. No untrusted input shall be evaluated as shell code.
+Every executor shall conceptually implement:
 
-### REQ-SEC-004 — Host-key and TLS verification (P1)
+- validate(target, action);
+- test(target, action);
+- execute(target, action, event);
+- verify(target, action, execution_result);
+- describe_capabilities().
 
-SSH host keys and HTTPS certificates shall be verified by default.
+Every result shall include executor, target, policy/version, event, start/finish timestamps, dry-run state, retry count, evidence grade, status, and a bounded redacted diagnostic.
 
-### REQ-SEC-005 — Audit trail (P1)
+### REQ-ACT-002 — Durable dispatch intent and evidence (P0)
 
-The addon shall record redacted event, policy, target, executor, result, and timestamp data.
+Immediately before a nonrepeatable external request, NUTMerlin shall append and fsync a durable dispatch intent. Ambiguity after intent shall produce outcome_unknown and shall not retry automatically.
 
-### REQ-SEC-006 — Update integrity (P1)
+Evidence grades shall be:
 
-The release process shall publish hashes or signatures and support rollback.
+- not_dispatched;
+- dispatch_rejected;
+- dispatch_accepted;
+- effect_verified;
+- outcome_unknown.
 
-### REQ-SEC-007 — CSRF/UI safety (P0)
+An execute response may prove acceptance only. Only the typed verifier may prove effect. Disconnect, failed ping, or session loss shall not prove a host is Off.
 
-State-changing UI operations shall use the established Merlin form/action mechanism and require authenticated router access.
+### REQ-ACT-003 — Retry classes and budgets (P0)
 
-### REQ-SEC-008 — Destructive dual opt-in (P2)
+Every operation shall declare nonrepeatable, idempotent, or idempotency_keyed semantics.
 
-Force-off and UPS/PDU output actions shall require both global feature enablement and target/action enablement.
+Default budgets shall be:
 
-## 11. Development and repository
+- connection timeout: 5 seconds, configurable 1–30;
+- dispatch timeout: 30 seconds, configurable 1–300;
+- verification timeout: 300 seconds, configurable 0–1800;
+- total action ceiling: 3600 seconds;
+- nonrepeatable: one dispatch attempt and no post-dispatch automatic retry;
+- idempotent/keyed: at most three total attempts with 2-second then 5-second delays;
+- one in-flight action per logical target;
+- at most two concurrent executor dispatches per installation;
+- at most 30 dispatch starts per rolling 60 seconds.
 
-### REQ-DEV-001 — WSL filesystem workflow (P0)
+A policy may narrow but not exceed an operation or qualified platform ceiling.
 
-Maintainer documentation shall place Linux-tooling working trees in the WSL/Linux filesystem rather than under `/mnt/c` by default.
+### REQ-EXEC-001 — NUT client onboarding is not an executor (P0)
 
-### REQ-DEV-002 — Stable command surface (P0)
+The standard secondary-client flow shall be modeled separately from the executor registry and shall create no router-side action result.
 
-The repository shall expose stable `make` targets for bootstrap, lint, tests, NUT integration, security checks, packaging, and optional hardware deployment.
+### REQ-EXEC-002 — Constrained local scripts (conditional P0)
 
-### REQ-DEV-003 — Hardware gates (P0)
+The local-script executor shall be unavailable unless the platform qualifies unprivileged execution, process cleanup, resource limits, protected filesystem access, and UID/process-scoped no-egress without root fallback.
 
-No default command shall deploy to a router, shut down a host, issue an administrative UPS command, or require hardware. Destructive and production-target actions shall require explicit environment gates.
+An imported script shall be an immutable hash-pinned POSIX /bin/sh text artifact no larger than 256 KiB and contain no NUL. It shall receive one versioned JSON document on stdin no larger than 32 KiB, return one JSON result on stdout no larger than 16 KiB, and have stderr capped at 8 KiB.
 
-### REQ-DEV-004 — Public repository defaults (P0)
+Policy input shall control no interpreter, path, argument, environment assignment, redirection, pipeline, or secret. On timeout, terminate the process group, wait two seconds, then kill the remainder.
 
-The project shall use the public `danielarvilpayne/nutmerlin` GitHub repository, GPL-3.0-or-later licensing, GitHub Actions, and feature-branch pull requests.
+### REQ-EXEC-003 — Restricted SSH (P1)
 
-### REQ-DEV-005 — Hardware tests outside PR gates (P0)
+SSH shall use the current qualified Entware OpenSSH cohort, a dedicated target-side restricted account/forced-command wrapper, and one keypair per binding.
 
-Hardware workflows shall be manually triggered and shall not be required for ordinary pull requests.
+Ed25519 shall be the default. Qualified RSA compatibility shall use at least 3072 bits with RSA-SHA2. The exact SHA-256 host fingerprint shall be verified independently; TOFU, firmware-client fallback, DSA, SHA-1, general shells, forwarding, and PTY shall be prohibited.
 
-## 12. Reliability and performance
+### REQ-EXEC-004 — Fixed notification webhook (P1)
 
-### REQ-REL-001 — Router availability (P0)
+Generic webhook shall publish only notification.publish using one closed profile:
 
-Failure of NUTMerlin shall not intentionally interrupt routing, DNS, Wi-Fi, or WAN services.
+- lan_anonymous: credential-free HTTP or HTTPS to the confirmed trusted LAN;
+- https_bearer: verified HTTPS with one binding-scoped bearer token;
+- https_hmac_v1: verified HTTPS with one binding-scoped HMAC-SHA-256 key and the exact ADR 0080 framing.
 
-### REQ-REL-002 — Resource bounds (P0)
+The method shall be POST, content type application/json, and body the versioned normalized envelope. Policies shall not select methods, headers, query secrets, body templates, or arbitrary fragments.
 
-Polling, logging, and retries shall be bounded for router CPU, memory, storage, and process count.
+Redirects shall be disabled. DNS results and the connected peer shall be scope-checked for every connection. Any 2xx shall mean delivery acceptance only. Generic webhook shall not retry after body dispatch because no receiver deduplication contract exists.
 
-### REQ-REL-003 — Dependency failure (P0)
+HMAC publication shall require trusted wall time. Receiver guidance shall default to 300 seconds maximum skew plus publication-ID deduplication.
 
-Missing `/opt`, failed USB attachment, stale UPS data, or crashed NUT processes shall produce diagnostics and safe degraded behavior.
+### REQ-EXEC-005 — Publish-only MQTT (P1)
 
-### REQ-REL-004 — No action on ambiguity (P0)
+MQTT shall publish only normalized notification, current state, and availability messages. It shall not subscribe for commands.
 
-When event state is contradictory or insufficient, destructive actions shall not be executed.
+MQTT v5 shall be the default with Clean Start 1 and Session Expiry 0. Explicit v3.1.1 compatibility shall use Clean Session 1. All publications shall use QoS 1. No persistent offline queue or automatic version/security downgrade shall exist.
 
-### REQ-REL-005 — Time correctness (P1)
+Only current state and availability may be retained. Events and action results shall never be retained.
 
-Policies shall use monotonic time for delays where available so wall-clock corrections do not incorrectly fire or cancel actions.
+### REQ-EXEC-006 — Qualified WinRM (conditional P2)
 
-## 13. Testability
+WinRM shall remain absent unless a reproducible supported Entware client stack exists.
 
-### REQ-TEST-001 — No full firmware emulator dependency (P0)
+An available binding shall use verified HTTPS, a dedicated non-admin constrained JEA-equivalent endpoint, one nonrepeatable graceful shutdown request, and independent Off verification. Runtime pip installation, homegrown WSMan, Basic/plaintext, CredSSP shortcuts, unrestricted administrator endpoints, broad TrustedHosts, and hibernation shall be prohibited.
 
-Normal development and CI shall not depend on full Asuswrt-Merlin firmware emulation.
+### REQ-EXEC-007 — Graceful-only Redfish (conditional P2)
 
-### REQ-TEST-002 — Router shims (P0)
+Redfish shall bind manually to one exact service identity and selected ComputerSystem over TLS 1.2 or newer with verified identity and a dedicated least-privilege account.
 
-Platform-specific commands and filesystem roots shall be abstractable for host tests.
+The target-side role shall permit read plus GracefulShutdown while denying ForceOff, reset, power-on, account administration, firmware, virtual media, console, and unrelated systems. NUTMerlin shall never test dangerous denial by attempting a dangerous command.
 
-### REQ-TEST-003 — NUT simulation (P0)
+host.graceful_shutdown shall send exactly one ResetType GracefulShutdown request. Verification shall default to 300 seconds with five-second polling and shall require two consecutive fresh Off observations. Timeout or ambiguity shall never escalate.
 
-Integration tests shall use `dummy-ups` with static and dynamic scenarios.
+### REQ-EXEC-008 — Notification-only integrations (P1)
 
-### REQ-TEST-004 — Optional legacy router rig (P0)
+P1 shall provide no built-in SMTP, SMS, mobile, cloud, inbound MQTT, or action-capable generic webhook adapter. External systems may consume notifications and act independently outside NUTMerlin’s verification contract.
 
-When available, the RT-AC3100 or another spare router shall provide manually invoked Merlin lifecycle, UI, firewall, mount, reboot, upgrade, and uninstall coverage. Its absence shall not block ordinary development or pull requests.
+## 9. Privilege, secrets, management, and release trust
 
-### REQ-TEST-005 — Real UPS gate (P0)
+### REQ-SEC-001 — Privilege separation (P0)
 
-Real UPS testing shall be a separate, manually gated stage and begin read-only.
+A small privileged lifecycle controller shall perform fixed ownership, install, configuration, firewall, and service operations. Status, policy, and any installed WebUI processing shall be unprivileged. A narrow execution broker shall revalidate one immutable intent and expose neither a general command interface nor raw secret material.
 
-### REQ-TEST-006 — Destructive test gates (P0)
+No root network listener or root policy/UI monolith shall exist. Managed upsd shall not run as root.
 
-Host shutdown, FSD, force-off, and output control tests shall require explicit opt-in.
+### REQ-SEC-002 — Secret store (P0)
 
-## 14. MVP acceptance criteria
+Secrets shall be stored in independently permissioned project-owned files referenced by opaque IDs.
 
-The MVP is acceptable when:
+Required modes shall be:
 
-1. It installs on the RT-AX86U Pro without disrupting routing.
-2. It can switch between `dummy-ups` and one real USB HID UPS.
-3. A remote standard NUT client can query the selected source.
-4. Default firewall/listener behavior is trusted-LAN only.
-5. Services recover after reboot and late Entware mount.
-6. UI and CLI report status and actionable diagnostics.
-7. Install, upgrade, repair, and uninstall are idempotent.
-8. No destructive UPS command is enabled.
-9. CI tests run without router or UPS hardware.
-10. The isolated router test matrix passes on at least one spare router, if compatible hardware is available.
+- secret directory: 0700;
+- ordinary secret: 0600;
+- NUT-readable generated material: 0640 with only the necessary group.
+
+Secrets shall not appear in custom_settings.txt, JavaScript, status pages, logs, command-line arguments where avoidable, configuration export, support bundles, or backups. NUTMerlin shall not claim secure erasure. A filesystem that cannot preserve the required boundary shall disable secret-bearing features.
+
+### REQ-SEC-003 — Input and path safety (P0)
+
+Every hostname, address, username, identifier, path, duration, threshold, payload field, and operation parameter shall be validated against a closed schema. Untrusted input shall never become shell code, a command fragment, a service-event name, a header name, a query secret, or an executable path.
+
+### REQ-SEC-004 — Transport and peer verification (P1/P2)
+
+Secret-bearing or non-LAN webhook, MQTT, WinRM, and Redfish shall require TLS 1.2 or newer and verified server identity. Trust-all, plaintext fallback, automatic downgrade, redirects, ambiguous resolution, and peer-address drift shall fail closed.
+
+### REQ-SEC-005 — Local management surfaces only (P0)
+
+NUTMerlin shall expose no standalone management web server, REST API, RPC listener, remote CLI wrapper, or third-party browser asset through P2.
+
+When the optional WebUI component is installed, the Merlin web adapter shall use the authenticated firmware origin/form/service-event path plus a one-time nonce bound to installation, management operation, candidate hash, and UI schema. The nonce shall expire after five minutes and be consumed on first attempted dispatch.
+
+The complete local CLI and any installed curated milestone-scoped WebUI shall call the same versioned management-operation controller. CLI JSON shall be a local result format, not a network protocol. Secrets shall enter through one-time form fields, stdin, or a protected file descriptor rather than argv.
+
+### REQ-SEC-006 — Wall-clock trust (P0)
+
+Each boot shall begin with wall time untrusted. Trust shall require positive same-boot synchronization evidence and a plausible result. A discontinuity greater than 300 seconds against monotonic projection or a platform unsynchronized/reset indication shall revoke trust.
+
+Untrusted wall time shall inhibit new TLS validity decisions, HMAC publication, authenticated release staging/activation, and key/certificate validity decisions. It shall never alter monotonic policy timing.
+
+### REQ-SEC-007 — Signed release root (P0)
+
+Every installable release shall have a detached OpenPGP signature over a canonical manifest listing version, artifacts, byte sizes, SHA-256 hashes, compatibility metadata, and installer requirement.
+
+The release trust root shall be an offline Ed25519 primary key identified by its full pinned fingerprint. The release-signing subkey shall have at most 12 months’ validity and shall remain outside CI. Entware gpgv2 and its provenance shall be part of the release verifier gate.
+
+Planned root transition shall be signed by old and new roots and publish both for at least 90 days and two public releases, whichever is longer. Suspected compromise shall stop publication and require manual trust bootstrap; a possibly compromised old signature shall not authorize automatic replacement.
+
+Public release shall wait until two independent project-controlled fingerprint publication channels and an emergency replacement procedure are documented and tested.
+
+## 10. Storage, journal, history, and export
+
+### REQ-STOR-001 — Qualified storage semantics (P0)
+
+Ext4 shall be the reference and recommended /opt filesystem. Another exact router/device/filesystem/mount profile shall be eligible only after proving persistent UID/GID and modes, case-sensitive names, regular/symlink/hard-link distinctions, same-directory atomic rename, file and directory fsync, reliable exclusive locking, executable Entware binaries, stable identity, and controlled interruption recovery.
+
+FAT, VFAT, and exFAT shall be incompatible. noexec, ownership emulation, ignored chmod/chown, unstable identity, or inadequate durable rename/fsync shall be refused. noatime is recommended but not a correctness gate. SSD is recommended for always-on use.
+
+### REQ-STOR-002 — Volatile status and bounded writes (P0)
+
+Current poll/status data shall remain in /tmp. No persistent write shall occur for every UPS poll. Swap shall not be required or created.
+
+### REQ-STOR-003 — Safety journal (P0)
+
+NUTMerlin shall reserve 4 MiB on /opt for a synchronous safety journal containing only authority and reconciliation facts. A required append/fsync failure shall block new state change while permitting safe read-only diagnostics where possible.
+
+### REQ-STOR-004 — JFFS safety anchor (P0)
+
+Two alternating 32 KiB JFFS slots, 64 KiB total, shall conservatively anchor installation/storage identity, selected generations, lifecycle phase, journal sequence/digest, and unresolved-state flags.
+
+The anchor shall contain no credential, private material, raw policy, target endpoint, telemetry series, operational history, or diagnostic text and shall not be written for ordinary polls or repeated health failures. Journal/anchor disagreement shall select the more restrictive state and inhibit new authority.
+
+### REQ-STOR-005 — Operational history (P0/P1)
+
+Default persistent history shall be:
+
+- normalized transitions: 4 MiB or 90 days;
+- action and lifecycle audit: 8 MiB or 180 days;
+- redacted health/diagnostics: 4 MiB or 14 days;
+- total: 16 MiB, separate from the journal.
+
+Identical health failures shall persist on first occurrence, recovery, and at most one summary every 15 minutes. Non-safety history may buffer for at most five seconds or 10 records.
+
+Operators may lower limits. Raising total history over 64 MiB or retention over 365 days shall require an expert setting and free-space validation.
+
+### REQ-STOR-006 — Policy-version retention (P0)
+
+One immutable serialized policy version shall be at most 256 KiB. The ordinary full policy store shall default to 8 MiB.
+
+The newest 10 inactive terminal versions per policy plus versions referenced by retained 180-day action history shall be retained. Active, in-progress, committed, outcome-unknown, unreconciled, rollback, and journal-referenced versions shall never be pruned regardless of age. Exhaustion shall refuse new activation rather than delete protected evidence.
+
+### REQ-STOR-007 — Export and support bundles (P0)
+
+Configuration export shall contain supported non-secret reconstruction data only. Imported secrets shall become unresolved bindings and imported policies shall remain inactive pending current validation.
+
+A public support bundle shall be allowlisted, pseudonymized with a bundle-local salt, and contain at most 24 hours or 1,000 operational records. A private bundle may retain more non-secret topology but shall still exclude every secret and private key.
+
+Temporary bundle files shall be mode 0600, expire after 10 minutes, and be deleted after confirmed handoff where possible. NUTMerlin shall never upload a bundle automatically.
+
+## 11. Reliability and failure behavior
+
+### REQ-REL-001 — Preserve router service (P0)
+
+Failure of NUTMerlin shall not intentionally interrupt routing, DNS, Wi-Fi, WAN, or other core firmware services. NUTMerlin shall use Merlin Addons API and user-script hooks and shall not permanently patch firmware files.
+
+### REQ-REL-002 — Fail closed on ambiguity (P0)
+
+Unknown source state, source identity ambiguity, policy conflict, unresolved action outcome, storage/journal/anchor inconsistency, foreign ownership, invalid configuration, untrusted transport, insufficient privilege, or failed activation evidence shall inhibit the affected state-changing authority.
+
+### REQ-REL-003 — Current-state network recovery (P1)
+
+After network recovery, notification transports shall publish current state and may publish a bounded gap summary. They shall not persist or replay stale webhook/MQTT events, and reconnection shall not verify prior effects.
+
+### REQ-REL-004 — Bounded resources (P0)
+
+Polling, logging, retries, queues, subprocesses, history, policy storage, and recovery loops shall remain within the fixed or qualified bounds in this document and the accepted ADRs.
+
+## 12. Repository and development safety
+
+### REQ-DEV-001 — Repository defaults (P0)
+
+The project shall use public darvilp/nutmerlin, GPL-3.0-or-later, GitHub Actions, protected main, feature branches, and draft pull requests. Hardware workflows shall be manually triggered and shall not gate ordinary pull requests.
+
+### REQ-DEV-002 — Stable local command surface (P0)
+
+The repository shall expose stable local entry points for bootstrap, lint, unit tests, NUT integration, security checks, documentation checks, packaging, and explicitly gated hardware operations.
+
+### REQ-DEV-003 — Hardware and destructive gates (P0)
+
+No default command shall deploy to a router, modify the production RT-AX86U Pro, shut down a host, or require physical hardware.
+
+Production-router mutation shall require NUTMERLIN_ALLOW_PRODUCTION_ROUTER=1. A test capable of host shutdown shall require NUTMERLIN_ALLOW_HOST_SHUTDOWN=1 plus its documented physical safeguards.
+
+NUTMERLIN_ALLOW_UPS_COMMANDS shall not authorize any output-control operation through P2. No automated test shall issue UPS output-off.
+
+## 13. Testability and release acceptance
+
+### REQ-TEST-001 — Hardware-free normal tests (P0)
+
+Normal development and CI shall use POSIX shell/static checks, platform shims, isolated filesystem roots, and NUT dummy-ups and shall require neither full firmware emulation nor physical hardware.
+
+### REQ-TEST-002 — Complete claim layers (P0)
+
+Host tests, package/ABI execution, simulated Merlin integration, exact-router qualification, and UPS capability qualification shall be reported as separate evidence layers. One layer shall not substitute for another.
+
+### REQ-TEST-003 — Safety defaults (P0)
+
+Executors shall default to dry-run in test environments. Simulators shall use harmless marker operations. Real UPS work shall begin read-only. Hardware tests shall tolerate missing/read-only /opt without state-changing action.
+
+### REQ-TEST-004 — Required negative coverage (P0)
+
+Tests shall cover input injection, symlink/path attacks, network-scope drift, secret redaction, untrusted clock, foreign/ambiguous ownership, every lifecycle journal boundary, torn JFFS anchors, stale/contradictory telemetry, source identity ambiguity, retry/evidence transitions, privilege fallback refusal, rollback/revocation interaction, and absence of forbidden operation classes.
+
+## 14. P0 public-release acceptance criteria
+
+P0 is acceptable only when:
+
+1. Both intended current Merlin families have current qualification evidence for the exact stable releases being advertised.
+2. Host tests, dummy-ups integration, current AArch64 Entware package/ABI execution, and simulated Merlin-profile tests pass.
+3. At least one complete exact current-router report and one harmless physical UPS base report satisfy ADR 0064.
+4. First install and every update authenticate a pinned signed manifest and artifacts; two independent fingerprint channels and the emergency replacement procedure are tested.
+5. Install, repair, update, one rollback, disable, recovery, clean uninstall, and emergency detach satisfy their ownership and journal contracts.
+6. One usbhid-ups source and isolated dummy-ups use immutable configuration generations and bounded service recovery.
+7. One confirmed IPv4 trusted subnet can query read-only NUT status; WAN, guest, VPN, other subnet, wildcard, and default IPv6 access fail closed.
+8. Each registered secondary client receives an independent once-shown restricted credential; loss, cutover, revocation, and rollback are safe.
+9. A core-only install is fully operable through the complete local CLI. When the optional exact-version WebUI is installed, it shares validated management operations and exposes no management listener, arbitrary shell, raw NUT configuration, secret, or dangerous command.
+10. Storage/journal/anchor failure, stale or contradictory telemetry, unknown outcomes, and conflicts inhibit new state-changing authority without disrupting router services.
+11. Persistent history, support bundles, and policy versions meet their size, age, privacy, and write-endurance bounds.
+12. No production FSD, writable UPS/PDU administration, ForceOff, output control, restoration, direct SNMP/PDU, hibernation, or automatic update exists.

@@ -13,6 +13,8 @@ These links are implementation references, not vendored dependencies. Recheck cu
 - AMTM  
   https://github.com/decoderman/amtm
 
+The current ecosystem survey for bundled, optional, and separately installed addon WebUIs is recorded in [research/merlin-webui-packaging.md](research/merlin-webui-packaging.md). It found both established companion UIs and numerous bundled counterexamples; the Addons API itself is packaging-neutral.
+
 Key facts to verify during implementation:
 
 - Addons API detection through `rc_support`.
@@ -35,6 +37,16 @@ Confirm package names and versions at install time. Do not assume the AArch64 fe
 
 - NUT documentation  
   https://networkupstools.org/docs/
+- upsmon.conf
+  https://networkupstools.org/docs/man/upsmon.conf.html
+- upsd.conf
+  https://networkupstools.org/docs/man/upsd.conf.html
+- upsd and NUT_CONFPATH
+  https://networkupstools.org/docs/man/upsd.html
+- upsdrvctl and NUT_CONFPATH
+  https://networkupstools.org/docs/man/upsdrvctl.html
+- usbhid-ups
+  https://networkupstools.org/docs/man/usbhid-ups.html
 - `dummy-ups`  
   https://networkupstools.org/docs/man/dummy-ups.html
 - Developer simulation notes  
@@ -55,6 +67,46 @@ Important semantics:
 - `dummy-ups` can use static `.dev` data or timed `.seq` replay.
 - FSD is intentionally latched and normally means the installation is committed to completing a shutdown sequence.
 - UPS telemetry and commands vary by model.
+- Polling/dead-time values in NUT are inputs to, not replacements for, NUTMerlin's own freshness contract.
+- Managed processes must be checked against the selected Entware build for consistent NUT_CONFPATH behavior.
+
+## Messaging protocols
+
+- OASIS MQTT 5.0
+  https://docs.oasis-open.org/mqtt/mqtt/v5.0/mqtt-v5.0.html
+- OASIS MQTT 3.1.1
+  https://docs.oasis-open.org/mqtt/mqtt/v3.1.1/mqtt-v3.1.1.html
+
+NUTMerlin's P1 MQTT profile is outbound only, QoS 1, and ephemeral. Use the specifications to verify Clean Start/Session Expiry, Clean Session, retained-message, acknowledgement, and reconnect behavior. Recheck broker/client interoperability during release qualification.
+
+## SSH
+
+- OpenBSD ssh_config manual
+  https://man.openbsd.org/OpenBSD-7.4/ssh_config.5
+- OpenBSD ssh-keygen manual
+  https://man.openbsd.org/OpenBSD-7.3/ssh-keygen.1
+
+Use current Entware OpenSSH behavior for release evidence. The accepted design requires independently verified host fingerprints, one binding keypair, target-enforced restriction, Ed25519 by default, and only qualified RSA-SHA2 compatibility.
+
+## WinRM and constrained PowerShell
+
+- Microsoft JEA role capabilities
+  https://learn.microsoft.com/en-us/powershell/scripting/security/remoting/jea/role-capabilities
+- Microsoft JEA security considerations
+  https://learn.microsoft.com/en-us/powershell/scripting/security/remoting/jea/security-considerations
+- PowerShell remoting troubleshooting, including workgroup/HTTPS/TrustedHosts
+  https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_remote_troubleshooting
+
+These sources define target-side constraints; they do not establish that a suitable Entware WSMan client exists. WinRM remains absent until its router client stack is reproducibly qualified.
+
+## Redfish
+
+- DMTF Redfish schemas and current data model
+  https://redfish.dmtf.org/schemas/
+- DMTF Redfish data model DSP0268
+  https://redfish.dmtf.org/schemas/v1/DSP0268_2025.3.html
+
+Use these references for ComputerSystem identity, Reset, GracefulShutdown, asynchronous task, and power-state vocabulary. P2 qualification still requires target-side least privilege that denies broader power/admin operations; schema support alone is insufficient.
 
 ## Windows clients
 

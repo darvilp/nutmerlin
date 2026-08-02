@@ -1,183 +1,256 @@
 # NUTMerlin development workflow
 
-## 1. Primary environment
+## 1. Primary and portable environments
 
-The primary development environment is:
+The primary maintainer environment is:
 
-- Windows 11 host
-- WSL2 Linux distribution
-- Codex IDE beta connected to the WSL workspace
-- Git and GitHub CLI inside WSL
-- Docker or Podman for disposable NUT integration tests
+- Windows 11 host;
+- WSL2 Linux distribution;
+- Codex IDE beta attached to the WSL workspace;
+- Git and GitHub CLI inside WSL;
+- Docker or Podman for disposable NUT and protocol test systems.
 
-The project must remain usable from an ordinary Linux host; WSL-specific behavior belongs in development documentation and adapters, not in runtime code.
+The repository and all normal tests must also work on an ordinary Linux host. WSL-specific behavior belongs in development/test guidance, never in the router runtime contract.
 
-## 2. Repository location
+Store the working tree in the Linux filesystem:
 
-Keep the repository in the WSL Linux filesystem:
+    mkdir -p ~/src
+    cd ~/src
+    git clone git@github.com:darvilp/nutmerlin.git
+    cd nutmerlin
 
-```sh
-mkdir -p ~/src
-cd ~/src
-git clone git@github.com:danielarvilpayne/nutmerlin.git
-cd nutmerlin
-```
+Do not use /mnt/c as the normal working tree for Linux tools. It introduces avoidable filesystem, permission, line-ending, and performance differences.
 
-Do not use `/mnt/c/...` as the primary working tree. Linux build and test tools perform better and have fewer permission/line-ending edge cases when the repository is stored under the WSL filesystem.
+## 2. Documentation and decision authority
 
-Open the directory through the Codex IDE's WSL integration. From WSL, Windows Explorer can inspect it with:
+Before changing product behavior, read:
 
-```sh
-explorer.exe .
-```
+1. AGENTS.md;
+2. requirements.md;
+3. architecture.md;
+4. security.md;
+5. testing.md;
+6. hardware.md;
+7. the relevant accepted ADRs under decisions/.
+
+Use root CONTEXT.md for canonical domain terminology. decisions/ is the only ADR hierarchy; do not create docs/adr or another parallel structure.
+
+Behavior changes must update the affected requirements, architecture, security invariants, tests, milestone boundary, backlog, and ADR when a genuinely new hard-to-reverse decision is made. Code must not silently override accepted documentation.
 
 ## 3. Host prerequisites
 
-Ubuntu/Debian baseline:
+An Ubuntu/Debian development host normally needs:
 
-```sh
-sudo apt update
-sudo apt install -y \
-  git gh make shellcheck shfmt bats jq curl \
-  openssh-client rsync netcat-openbsd \
-  python3 python3-venv smartmontools f3
-```
+    sudo apt update
+    sudo apt install -y \
+      git gh make shellcheck shfmt bats jq curl \
+      openssh-client rsync netcat-openbsd \
+      python3 python3-venv smartmontools f3
 
-Install either Docker Engine/Docker Desktop integration or Podman. The project should not require both.
+Install Docker or Podman according to the host environment; the project should not require both.
 
-Verify:
+NUT/Entware binaries used for release qualification come from the exact test cohort, not from whatever host package happens to be installed.
 
-```sh
-git --version
-gh --version
-shellcheck --version
-shfmt --version
-bats --version
-docker version || podman version
-```
+## 4. Stable repository command surface
 
-## 4. Expected repository commands
+The repository should converge on stable local entry points:
 
-The initial scaffold should converge on these stable entry points:
+    make bootstrap
+    make lint
+    make test
+    make test-unit
+    make test-nut
+    make test-security
+    make docs-check
+    make package
 
-```sh
-make bootstrap
-make lint
-make test
-make test-unit
-make test-nut
-make test-security
-make package
-make docs-check
-```
+Optional manually invoked hardware/evidence commands should use explicit profiles:
 
-Optional hardware commands:
+    make router-probe PROFILE=ac3100
+    make deploy PROFILE=ac3100
+    make router-smoke PROFILE=ac3100
+    make router-report PROFILE=ac3100
 
-```sh
-make router-probe PROFILE=ac3100
-make deploy PROFILE=ac3100
-make router-smoke PROFILE=ac3100
-make router-report PROFILE=ac3100
-```
+Production hardware requires:
 
-Production hardware requires an explicit gate:
+    NUTMERLIN_ALLOW_PRODUCTION_ROUTER=1 make deploy PROFILE=ax86u-pro
 
-```sh
-NUTMERLIN_ALLOW_PRODUCTION_ROUTER=1 make deploy PROFILE=ax86u-pro
-```
+An actual host-shutdown test requires:
 
-No default Make target may deploy to a router, shut down a host, issue an administrative UPS command, or require hardware.
+    NUTMERLIN_ALLOW_HOST_SHUTDOWN=1
 
-## 5. Local configuration
+NUTMERLIN_ALLOW_UPS_COMMANDS may gate future harmless administrative test scaffolding, but it does not authorize load.off, shutdown.*, outlet actions, Redfish ForceOff, or any output-control operation through P2.
 
-Do not commit router addresses, usernames, private keys, or local paths. Use an ignored file such as:
+No default target may:
 
-```text
-.env.local
-config/local/router-ac3100.conf
-```
+- deploy or mutate a router;
+- modify the RT-AX86U Pro;
+- shut down a host;
+- issue a writable UPS/PDU command;
+- require a router, UPS, BMC, or Windows machine;
+- install dependencies on a shared Entware system.
 
-Example non-secret profile:
+## 5. Local configuration and sensitive values
 
-```ini
-NUTMERLIN_ROUTER_HOST=nutmerlin-ac3100
-NUTMERLIN_ROUTER_PORT=22
-NUTMERLIN_ROUTER_USER=admin
-NUTMERLIN_ROUTER_CLASS=legacy-test
-NUTMERLIN_ROUTER_PRODUCTION=0
-```
+Do not commit:
 
-Store the SSH key in the normal WSL SSH directory and pin the host key in `~/.ssh/known_hosts`.
+- router addresses or source subnets;
+- usernames;
+- private keys, passwords, bearer/HMAC values, or NUT credentials;
+- certificate/CA/pin material;
+- physical device serials;
+- target labels/topology;
+- local filesystem paths.
 
-## 6. Codex working instructions
+Use ignored local profiles, for example:
 
-Codex should work in small reviewable stages:
+    .env.local
+    config/local/router-ac3100.conf
 
-1. Read `AGENTS.md`, `requirements.md`, `architecture.md`, `security.md`, and `testing.md`.
-2. Implement or update one milestone slice.
-3. Add tests before claiming completion.
-4. Run the relevant `make` targets.
-5. Summarize changed requirements, safety impact, and untested hardware assumptions.
-6. Commit on a feature branch only after tests pass.
-7. Open a draft pull request for review rather than pushing directly to `main`.
+An ordinary non-secret profile may contain:
 
-Codex must not:
+    NUTMERLIN_ROUTER_HOST=nutmerlin-ac3100
+    NUTMERLIN_ROUTER_PORT=22
+    NUTMERLIN_ROUTER_USER=admin
+    NUTMERLIN_ROUTER_CLASS=legacy-test
+    NUTMERLIN_ROUTER_PRODUCTION=0
 
-- assume the RT-AC3100 is available
-- ask for real-UPS testing when `dummy-ups` can cover the behavior
-- install packages on a router without an explicit hardware task
-- use the production RT-AX86U Pro by default
-- place the repository on `/mnt/c`
-- modify Windows shutdown configuration from WSL during ordinary tests
+Keep developer SSH private keys in the normal protected SSH store and pin the independently verified host fingerprint. Local test credentials must never be reused on production hardware.
 
-## 7. WSL networking
+## 6. Normal development loop
 
-Default WSL2 NAT mode is sufficient for outbound connections from WSL to LAN devices in the normal topology:
+For each bounded change:
 
-```sh
-ssh admin@nutmerlin-ac3100
-curl http://nutmerlin-ac3100/
-nc -vz nutmerlin-ac3100 3493
-```
+1. Identify the controlling requirement and ADR.
+2. Add or update the smallest hardware-free test that demonstrates the behavior or safety invariant.
+3. Change only the relevant platform-neutral module or narrow adapter.
+4. Run focused tests, then the required stable command set.
+5. Verify no unrelated worktree changes, secret, endpoint, or hardware dependency entered the change.
+6. Update affected documentation and evidence claims.
+7. Review standards and specification conformance before committing.
 
-Mirrored networking is optional. Use it only when a router or other LAN device must initiate a connection to a service listening inside WSL or when NAT/VPN behavior prevents the needed traffic.
+Do not claim:
 
-When running a webhook test server inside WSL, prefer one of:
+- a test passed when a dependency or hardware layer was skipped;
+- an emulator/container result qualifies a router;
+- a router dummy-ups result qualifies a physical UPS;
+- one physical UPS report qualifies all telemetry;
+- a network disconnect proves a host is Off;
+- a dry-run grants production authority.
 
-- invoke it from WSL-local tests only
-- expose it through the Windows host with an explicit firewall rule
-- enable mirrored networking for that test environment
+## 7. Platform-neutral implementation boundary
 
-Do not weaken the Windows or Hyper-V firewall globally just to simplify a test.
+All normal logic should run under isolated host roots and named platform adapters.
 
-## 8. USB access from WSL2
+Direct Merlin calls belong behind adapter functions for:
 
-Direct USB access is optional. The normal development path uses `dummy-ups`, and the normal real hardware path attaches the UPS to an ASUS router.
+- NVRAM;
+- firmware/Addons API;
+- optional WebUI component mounting, removal, and service-event integration;
+- user-script hooks;
+- firewall inspection/application;
+- mount/storage identity;
+- services/processes;
+- accounts/privilege;
+- boot/time synchronization;
+- syslog/resource limits.
 
-For a deliberate direct-USB experiment, Windows can share a USB device with WSL2 through `usbipd-win`. Treat this as a separate test profile because the device cannot simultaneously be owned by PowerPanel, WinNUT, and the WSL NUT driver.
+Runtime shell is POSIX /bin/sh unless a component’s accepted contract says otherwise. Do not assume Bash.
 
-Direct WSL USB experiments must not become a prerequisite for CI or normal development.
+The host harness must make it impossible to alter the developer’s real /jffs, /opt, web root, firewall, services, or opkg state.
 
-## 9. Native Windows client testing
+## 8. Entware development rules
 
-Use a native Windows NUT client or Windows service for production-style behavior. WSL2 must not be responsible for shutting down Windows.
+NUTMerlin treats Entware as a shared prerequisite.
 
-Test progression:
+During normal host work:
 
-1. connect and display state
-2. invoke a harmless marker action
-3. verify short-outage cancellation
-4. verify long-outage action
-5. enable actual shutdown only with an explicit gate and saved work
+- simulate opkg plans and failures;
+- use disposable roots/containers for package mutation;
+- do not run blanket upgrade;
+- do not pin an old package as the compatibility solution;
+- do not vendor/private-build NUT;
+- test a coherent older cohort only as compatibility-only;
+- record exact package provenance.
 
-## 10. Suggested first Codex work sequence
+During release qualification, execute the current supported AArch64 cohort, including gpgv2 and every advertised optional dependency. Recheck feed contents at release time.
 
-1. Create the repository scaffold and CI.
-2. Implement mock filesystem roots and Merlin command shims.
-3. Implement structured settings validation and NUT config rendering.
-4. Add golden-file tests.
-5. Bring up containerized `dummy-ups`, `upsd`, and `upsc`.
-6. Implement status normalization.
-7. Add the reversible timer state machine.
-8. Add packaging and a no-op/mock deployment profile.
-9. Only then prepare the optional RT-AC3100.
+Never bootstrap, format, repair, or replace Entware as a NUTMerlin development side effect.
+
+## 9. WSL networking
+
+Default WSL2 NAT is normally sufficient for outbound SSH and NUT queries to LAN targets:
+
+    ssh admin@nutmerlin-ac3100
+    nc -vz nutmerlin-ac3100 3493
+    upsc ups@nutmerlin-ac3100
+
+Mirrored networking is optional and only needed when a LAN test target must initiate traffic into WSL or host NAT/VPN behavior prevents the required path.
+
+For a webhook/MQTT test service:
+
+- prefer same-environment/container traffic;
+- expose through the Windows host only with an exact temporary firewall rule; or
+- use mirrored networking for the named test.
+
+Never weaken Windows, Hyper-V, router, or LAN firewall policy globally to simplify a test.
+
+## 10. USB access from WSL2
+
+Direct WSL USB is optional. The normal development source is dummy-ups, and the normal physical source attaches to a gated ASUS router.
+
+For a deliberate experiment, usbipd-win may attach a device to WSL. Record that the UPS cannot simultaneously be owned by PowerPanel, a native Windows NUT client, and the WSL driver.
+
+Direct WSL USB must not become a CI, release, or contributor prerequisite.
+
+## 11. Router profiles and gates
+
+### mock
+
+Host filesystem, process, network, clock, and Merlin-command shims. This is the normal development profile.
+
+### current-3004 and current-3006
+
+Simulated capability profiles representing the currently qualified firmware-family contracts. Their behavior is test data, not exact hardware qualification.
+
+### ac3100
+
+Optional legacy Merlin 386/ARMv7 profile. It may be skipped when unavailable or uninformative. Use dummy-ups first, isolate internet egress, and store no reusable production secret.
+
+### ax86u-pro
+
+Production-reference exact-hardware profile. Every deployment or mutation requires NUTMERLIN_ALLOW_PRODUCTION_ROUTER=1 and a task-specific safety checklist.
+
+### physical UPS profiles
+
+Each physical profile identifies exact device/driver/NUT evidence and begins read-only. It never enables a writable/output command.
+
+## 12. Native Windows client tests
+
+Use a native Windows NUT client/service for production-style client-local behavior; WSL2 is not the shutdown agent.
+
+Progression:
+
+1. read-only query;
+2. restricted secondary authentication;
+3. harmless local marker;
+4. short-outage cancellation;
+5. long-outage local action;
+6. optional actual graceful shutdown with the explicit gate and saved work.
+
+Keep protocol-level client-neutral tests even when one particular Windows client is used. Hibernation is outside P0–P2.
+
+## 13. Repository and review workflow
+
+Project defaults:
+
+- public darvilp/nutmerlin;
+- GPL-3.0-or-later;
+- GitHub Actions host CI;
+- protected main;
+- feature branches and draft pull requests;
+- manual hardware workflows outside ordinary PR gates.
+
+Preserve unrelated dirty-worktree changes. Stage only intended paths. A milestone/capability is not complete because files exist; every applicable exit gate in plan.md and evidence rule in testing.md must pass.
+
+Release artifacts are produced by CI, authenticated offline, and installed only through the signed-manifest contract. Development convenience never bypasses first-install, safe-window, rollback, or release-root requirements.
