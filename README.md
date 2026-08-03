@@ -39,13 +39,8 @@ Normal development runs on Linux or WSL2 without a router or physical UPS:
 ```sh
 make bootstrap
 make test
-make package
-```
-
-The first integration gate will add:
-
-```sh
 make test-nut
+make package
 ```
 
 See `development.md` and `testing.md`. Real-router modification is always manually gated with `NUTMERLIN_ALLOW_PRODUCTION_ROUTER=1`.

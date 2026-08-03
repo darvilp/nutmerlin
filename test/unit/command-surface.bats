@@ -21,7 +21,7 @@ setup() {
 @test "bootstrap requires a complete real NUT binary set" {
 	private_nut_root=$BATS_TEST_TMPDIR/nut-root
 	mkdir -p "$private_nut_root/lib/nut" "$private_nut_root/bin"
-	for binary_name in dummy-ups upsd; do
+	for binary_name in dummy-ups upsd usbhid-ups; do
 		printf '%s\n' '#!/bin/sh' 'exit 0' >"$private_nut_root/lib/nut/$binary_name"
 		chmod 700 "$private_nut_root/lib/nut/$binary_name"
 	done

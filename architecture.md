@@ -64,6 +64,7 @@ The platform module contains the only direct use of `/jffs/scripts`, `nvram`, `i
     share/dummy/cyberpower.dev
     VERSION
     installation.id
+    entware.tsv
     owned-files
     enabled
 
@@ -88,6 +89,8 @@ The platform module contains the only direct use of `/jffs/scripts`, `nvram`, `i
 Candidate directories are created beneath `/opt/etc/nutmerlin/config`, not `/tmp`, so selector replacement remains on one filesystem. Directories containing credentials are `0700`; secret/configuration files are `0600` or the narrowest mode required by the qualified Entware NUT identity.
 
 The ambient `/opt/etc/nut` is never modified. Its unexpected configuration contributes to foreign-deployment refusal.
+
+`entware.tsv` records only the six observed required package names, versions, and one consistent architecture. It is ownership metadata, not a package lock or package-mutation plan.
 
 ## 4. Configuration activation
 

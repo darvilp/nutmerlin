@@ -43,7 +43,7 @@ nut_binary_is_available() {
 
 require_nut_binaries() {
 	missing=0
-	for required_nut_binary in dummy-ups upsd upsc; do
+	for required_nut_binary in dummy-ups upsd upsc usbhid-ups; do
 		if ! nut_binary_is_available "$required_nut_binary"; then
 			printf 'missing required host NUT binary: %s\n' "$required_nut_binary" >&2
 			missing=1
@@ -53,6 +53,7 @@ require_nut_binaries() {
 }
 
 shell_files() {
+	printf '%s\n' "$repository_root/install.sh"
 	find "$repository_root/bin" "$repository_root/lib" "$repository_root/test" "$repository_root/tools" \
 		-type f -name '*.sh' -print
 	find "$repository_root/bin" -type f -print
@@ -108,22 +109,30 @@ run_package() {
 		(
 			cd "$repository_root"
 			tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \
-				-cf "$build_archive" LICENSE bin lib share
+				-cf "$build_archive" LICENSE VERSION install.sh bin lib share
 		)
 		gzip -n -c "$build_archive" >"$build_output"
 	}
 
 	build_package "$temporary_archive" "$temporary_package"
+	test -x "$repository_root/install.sh"
 	test -x "$repository_root/bin/nutmerlin"
 	test -x "$repository_root/lib/nutmerlin/result.sh"
 	test -s "$repository_root/share/dummy/cyberpower.dev"
 	package_listing=$(tar -tzf "$temporary_package")
 	test "$package_listing" = 'LICENSE
+VERSION
+install.sh
 bin/
 bin/nutmerlin
 lib/
 lib/nutmerlin/
+lib/nutmerlin/configuration.sh
+lib/nutmerlin/entware.sh
+lib/nutmerlin/ownership.sh
+lib/nutmerlin/paths.sh
 lib/nutmerlin/result.sh
+lib/nutmerlin/service.sh
 share/
 share/dummy/
 share/dummy/cyberpower.dev'
@@ -153,7 +162,9 @@ case $command_name in
 	test-nut)
 		require_commands
 		require_nut_binaries
-		bats "$repository_root/test/integration/dummy-nut.bats"
+		for integration_suite in "$repository_root"/test/integration/*.bats; do
+			bats "$integration_suite"
+		done
 		;;
 	test-security)
 		require_commands

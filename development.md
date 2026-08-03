@@ -6,7 +6,7 @@ Use a Linux filesystem checkout. WSL2 is supported; do not place the working tre
 
 ## 2. Host tools
 
-The repository checks require GNU Make, Bats, ShellCheck, shfmt, ripgrep, tar, gzip, `ss` from iproute2, and the host packages providing `dummy-ups`, `upsd`, and `upsc` for `make test-nut`.
+The repository checks require GNU Make, Bats, ShellCheck, shfmt, ripgrep, tar, gzip, `ss` from iproute2, and the host packages providing `dummy-ups`, `usbhid-ups`, `upsd`, and `upsc` for installation and `make test-nut`.
 
 ```sh
 make bootstrap

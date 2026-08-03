@@ -3,6 +3,11 @@
 set -eu
 
 program_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+if [ -d "$program_dir/../lib/nutmerlin" ]; then
+	library_dir=$program_dir/../lib/nutmerlin
+else
+	library_dir=$program_dir/../lib
+fi
 
 usage() {
 	printf '%s\n' 'usage: nutmerlin status [--json]' >&2
@@ -36,9 +41,67 @@ case $command_name in
 		esac
 		# The installed core is resolved relative to the CLI.
 		# shellcheck disable=SC1091
-		. "$program_dir/../lib/nutmerlin/result.sh"
+		. "$library_dir/result.sh"
 		result_emit status "$output_format" unavailable unavailable 'NUTMerlin core is not installed'
 		exit 69
+		;;
+	service)
+		[ "$#" -eq 1 ] || usage
+		service_action=$1
+		case $service_action in
+			start | stop | restart) ;;
+			*) usage ;;
+		esac
+		# shellcheck disable=SC1091
+		. "$library_dir/paths.sh"
+		# shellcheck disable=SC1091
+		. "$library_dir/entware.sh"
+		# shellcheck disable=SC1091
+		. "$library_dir/configuration.sh"
+		# shellcheck disable=SC1091
+		. "$library_dir/ownership.sh"
+		# shellcheck disable=SC1091
+		. "$library_dir/service.sh"
+		paths_initialize
+		if [ "$service_action" = stop ]; then
+			ownership_verify_code_root "$NUTMERLIN_JFFS_ROOT/addons/nutmerlin" || {
+				printf '%s\n' 'service refused: installed code ownership evidence is incomplete' >&2
+				exit 78
+			}
+		else
+			ownership_verify_installed_state || {
+				printf '%s\n' 'service refused: installed ownership evidence is incomplete' >&2
+				exit 78
+			}
+		fi
+		service_run_locked "service_$service_action"
+		# shellcheck disable=SC1091
+		. "$library_dir/result.sh"
+		result_emit service human ok success "$SERVICE_MESSAGE"
+		;;
+	source)
+		if [ "$#" -ne 1 ] || [ "$1" != use-dummy ]; then
+			usage
+		fi
+		# shellcheck disable=SC1091
+		. "$library_dir/paths.sh"
+		# shellcheck disable=SC1091
+		. "$library_dir/entware.sh"
+		# shellcheck disable=SC1091
+		. "$library_dir/configuration.sh"
+		# shellcheck disable=SC1091
+		. "$library_dir/ownership.sh"
+		# shellcheck disable=SC1091
+		. "$library_dir/service.sh"
+		paths_initialize
+		ownership_verify_installed_state || {
+			printf '%s\n' 'source refused: installed ownership evidence is incomplete' >&2
+			exit 78
+		}
+		service_run_locked configuration_activate_dummy
+		# shellcheck disable=SC1091
+		. "$library_dir/result.sh"
+		result_emit source human ok success "$SOURCE_MESSAGE"
 		;;
 	*) usage ;;
 esac

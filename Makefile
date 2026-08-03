@@ -1,7 +1,11 @@
-.PHONY: bootstrap lint test-unit test test-nut test-security docs-check package
+.PHONY: bootstrap install lint test-unit test test-nut test-security docs-check package
 
 bootstrap:
 	@tools/project-checks.sh bootstrap
+
+install:
+	@test -n "$(DESTDIR)" || { printf '%s\n' 'DESTDIR is required for development install' >&2; exit 64; }
+	@NUTMERLIN_ENABLE_TEST_ADAPTERS=1 NUTMERLIN_TEST_ROOT="$(DESTDIR)" ./install.sh
 
 lint:
 	@tools/project-checks.sh lint

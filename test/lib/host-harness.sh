@@ -6,6 +6,8 @@ host_harness_setup() {
 	export NUTMERLIN_TEST_ROOT
 	NUTMERLIN_ISOLATION_ROOT=$NUTMERLIN_TEST_ROOT
 	export NUTMERLIN_ISOLATION_ROOT
+	printf '%s\n' 'nutmerlin-test-root-v1' >"$NUTMERLIN_TEST_ROOT/.nutmerlin-test-root"
+	chmod 600 "$NUTMERLIN_TEST_ROOT/.nutmerlin-test-root"
 
 	mkdir -p \
 		"$NUTMERLIN_TEST_ROOT/bin" \
