@@ -1,4 +1,4 @@
-.PHONY: bootstrap lint test-unit test test-security docs-check package
+.PHONY: bootstrap lint test-unit test test-nut test-security docs-check package
 
 bootstrap:
 	@tools/project-checks.sh bootstrap
@@ -10,6 +10,9 @@ test-unit:
 	@tools/project-checks.sh test-unit
 
 test: lint test-unit test-security docs-check
+
+test-nut:
+	@tools/project-checks.sh test-nut
 
 test-security:
 	@tools/project-checks.sh test-security

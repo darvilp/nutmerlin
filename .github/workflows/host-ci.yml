@@ -15,10 +15,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install host test tools
-        run: sudo apt-get update && sudo apt-get install -y bats jq ripgrep shellcheck shfmt
+        run: sudo apt-get update && sudo apt-get install -y bats iproute2 jq nut-client nut-server ripgrep shellcheck shfmt
       - name: Check prerequisites
         run: make bootstrap
       - name: Run host-safe checks
         run: make test
+      - name: Run real NUT loopback integration
+        run: make test-nut
       - name: Build core package
         run: make package

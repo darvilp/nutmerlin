@@ -11,20 +11,16 @@ host_harness_setup() {
 		"$NUTMERLIN_TEST_ROOT/bin" \
 		"$NUTMERLIN_TEST_ROOT/jffs" \
 		"$NUTMERLIN_TEST_ROOT/opt" \
-		"$NUTMERLIN_TEST_ROOT/status" \
-		"$NUTMERLIN_TEST_ROOT/web"
-	chmod 700 "$NUTMERLIN_TEST_ROOT/status"
+		"$NUTMERLIN_TEST_ROOT/tmp"
 
-	NUTMERLIN_ROUTER_ROOT=$NUTMERLIN_TEST_ROOT/jffs
-	NUTMERLIN_ENTWARE_ROOT=$NUTMERLIN_TEST_ROOT/opt
-	NUTMERLIN_STATUS_ROOT=$NUTMERLIN_TEST_ROOT/status
-	NUTMERLIN_WEB_ROOT=$NUTMERLIN_TEST_ROOT/web
+	NUTMERLIN_JFFS_ROOT=$NUTMERLIN_TEST_ROOT/jffs
+	NUTMERLIN_OPT_ROOT=$NUTMERLIN_TEST_ROOT/opt
+	NUTMERLIN_TMP_ROOT=$NUTMERLIN_TEST_ROOT/tmp
 	NUTMERLIN_EXTERNAL_CALL_LOG=$NUTMERLIN_TEST_ROOT/external-calls
-	export NUTMERLIN_ROUTER_ROOT NUTMERLIN_ENTWARE_ROOT
-	export NUTMERLIN_STATUS_ROOT NUTMERLIN_WEB_ROOT
+	export NUTMERLIN_JFFS_ROOT NUTMERLIN_OPT_ROOT NUTMERLIN_TMP_ROOT
 	export NUTMERLIN_EXTERNAL_CALL_LOG
 
-	for command_name in nvram iptables ip6tables service opkg; do
+	for command_name in cru iptables mount nvram service; do
 		# The generated stub must expand these values when it runs, not now.
 		# shellcheck disable=SC2016
 		printf '%s\n' '#!/bin/sh' \
@@ -32,17 +28,14 @@ host_harness_setup() {
 			'exit 99' >"$NUTMERLIN_TEST_ROOT/bin/$command_name"
 		chmod 700 "$NUTMERLIN_TEST_ROOT/bin/$command_name"
 	done
-	if [ -n "${NUTMERLIN_TEST_STORAGE_PROBE_HELPER:-}" ]; then
-		cp -- "$NUTMERLIN_TEST_STORAGE_PROBE_HELPER" "$NUTMERLIN_TEST_ROOT/bin/nutmerlin-storage-durability-probe"
-		chmod 700 "$NUTMERLIN_TEST_ROOT/bin/nutmerlin-storage-durability-probe"
-	fi
-
 	PATH=$NUTMERLIN_TEST_ROOT/bin:$PATH
 	export PATH
 }
 
 host_harness_teardown() {
 	if [ -n "${NUTMERLIN_TEST_ROOT:-}" ] && [ -d "$NUTMERLIN_TEST_ROOT" ]; then
-		rm -rf -- "$NUTMERLIN_TEST_ROOT"
+		case $NUTMERLIN_TEST_ROOT in
+			"${TMPDIR:-/tmp}"/nutmerlin-host-test.*) rm -rf -- "$NUTMERLIN_TEST_ROOT" ;;
+		esac
 	fi
 }

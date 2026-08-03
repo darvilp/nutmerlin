@@ -1,8 +1,6 @@
 # NUTMerlin v0.1 testing and evidence
 
-Evidence is layered. Passing one layer never claims another.
-
-During the simplification migration, `make test-nut` becomes an enforced ordinary gate in issue #14. Before that ticket lands, its documented absence is expected; #14 cannot complete without enabling it in local and CI checks.
+Evidence is layered. Passing one layer never claims another. `make test-nut` is an enforced ordinary gate and uses real host NUT binaries.
 
 ## 1. Ordinary pull-request gates
 

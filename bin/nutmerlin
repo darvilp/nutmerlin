@@ -3,43 +3,19 @@
 set -eu
 
 program_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
-temporary_root=
-
-cleanup() {
-	if [ -n "$temporary_root" ] && [ -d "$temporary_root" ]; then
-		rm -rf -- "$temporary_root"
-	fi
-}
-
-prepare_host_roots() {
-	if [ -n "${NUTMERLIN_ISOLATION_ROOT:-}" ]; then
-		return
-	fi
-
-	temporary_root=$(mktemp -d "${TMPDIR:-/tmp}/nutmerlin-cli.XXXXXX")
-	trap cleanup EXIT HUP INT TERM
-	mkdir -p \
-		"$temporary_root/jffs" \
-		"$temporary_root/opt" \
-		"$temporary_root/status" \
-		"$temporary_root/web"
-
-	NUTMERLIN_ISOLATION_ROOT=$temporary_root
-	NUTMERLIN_ROUTER_ROOT=$temporary_root/jffs
-	NUTMERLIN_ENTWARE_ROOT=$temporary_root/opt
-	NUTMERLIN_STATUS_ROOT=$temporary_root/status
-	NUTMERLIN_WEB_ROOT=$temporary_root/web
-	export NUTMERLIN_ISOLATION_ROOT NUTMERLIN_ROUTER_ROOT
-	export NUTMERLIN_ENTWARE_ROOT NUTMERLIN_STATUS_ROOT NUTMERLIN_WEB_ROOT
-}
 
 usage() {
-	printf '%s\n' 'usage: nutmerlin {self-check|platform-eligibility} [--json]' >&2
-	printf '%s\n' '       nutmerlin dependency-plan [--json] interactive [current|keep-compatible] [none|ssh]' >&2
-	printf '%s\n' '       nutmerlin dependency-plan [--json] unattended none|current|keep-compatible [none|ssh]' >&2
-	printf '%s\n' '       nutmerlin dependency-plan [--json] uninstall' >&2
-	printf '%s\n' '       nutmerlin storage-preflight [--json] TRANSACTION_BYTES TEMPORARY_BYTES' >&2
-	printf '%s\n' '       nutmerlin storage-readiness [--json] ELAPSED LAST_PROBE absent|ready|started|failed' >&2
+	printf '%s\n' 'usage: nutmerlin status [--json]' >&2
+	printf '%s\n' '       nutmerlin diagnostics [--json]' >&2
+	printf '%s\n' '       nutmerlin service start|stop|restart' >&2
+	printf '%s\n' '       nutmerlin source show|use-dummy' >&2
+	printf '%s\n' '       nutmerlin source configure-usbhid --vendor-id ID --product-id ID [--serial S | --busport P]' >&2
+	printf '%s\n' '       nutmerlin lan configure --address IPv4 --cidr CIDR' >&2
+	printf '%s\n' '       nutmerlin lan disable' >&2
+	printf '%s\n' '       nutmerlin client add NAME [--json]' >&2
+	printf '%s\n' '       nutmerlin client revoke CLIENT_ID' >&2
+	printf '%s\n' '       nutmerlin enable|disable|repair|uninstall' >&2
+	printf '%s\n' '       nutmerlin update ARCHIVE' >&2
 	exit 64
 }
 
@@ -48,87 +24,21 @@ command_name=$1
 shift
 
 case $command_name in
-	self-check | platform-eligibility)
+	status)
 		output_format=human
-		if [ "$#" -gt 0 ]; then
-			if [ "$#" -ne 1 ] || [ "$1" != "--json" ]; then
-				usage
-			fi
-			output_format=json
-		fi
-		prepare_host_roots
-		# The installed CLI resolves its version-matched core relative to itself.
+		case $# in
+			0) ;;
+			1)
+				[ "$1" = --json ] || usage
+				output_format=json
+				;;
+			*) usage ;;
+		esac
+		# The installed core is resolved relative to the CLI.
 		# shellcheck disable=SC1091
-		. "$program_dir/../lib/nutmerlin/management-operation.sh"
-		if [ "$command_name" = self-check ]; then
-			management_operation_run core.self-check.v1 "$output_format"
-		else
-			# shellcheck disable=SC1091
-			. "$program_dir/../lib/nutmerlin/platform-qualification.sh"
-			# shellcheck disable=SC1091
-			. "$program_dir/../lib/nutmerlin/platform-eligibility.sh"
-			management_operation_run platform.eligibility.v1 "$output_format"
-		fi
+		. "$program_dir/../lib/nutmerlin/result.sh"
+		result_emit status "$output_format" unavailable unavailable 'NUTMerlin core is not installed'
+		exit 69
 		;;
-	dependency-plan)
-		output_format=human
-		if [ "${1:-}" = --json ]; then
-			output_format=json
-			shift
-		fi
-		if [ "$#" -lt 1 ] || [ "$#" -gt 3 ]; then
-			usage
-		fi
-		# shellcheck disable=SC1091
-		. "$program_dir/../lib/nutmerlin/management-operation.sh"
-		# shellcheck disable=SC1091
-		. "$program_dir/../lib/nutmerlin/dependency-cohort.sh"
-		# shellcheck disable=SC1091
-		. "$program_dir/../lib/nutmerlin/dependency-adapter.sh"
-		# shellcheck disable=SC1091
-		. "$program_dir/../lib/nutmerlin/dependency-plan.sh"
-		management_operation_run dependency.plan.v1 "$output_format" "$@"
-		;;
-	storage-preflight)
-		output_format=human
-		if [ "${1:-}" = --json ]; then
-			output_format=json
-			shift
-		fi
-		[ "$#" -eq 2 ] || usage
-		# shellcheck disable=SC1091
-		. "$program_dir/../lib/nutmerlin/management-operation.sh"
-		# shellcheck disable=SC1091
-		. "$program_dir/../lib/nutmerlin/storage-qualification.sh"
-		# shellcheck disable=SC1091
-		. "$program_dir/../lib/nutmerlin/storage-preflight.sh"
-		if [ "${NUTMERLIN_ENABLE_TEST_ADAPTERS:-0}" != 1 ] || ! roots_are_isolated; then
-			NUTMERLIN_STORAGE_ADAPTER=native
-			NUTMERLIN_ENTWARE_ROOT=/opt
-			export NUTMERLIN_STORAGE_ADAPTER NUTMERLIN_ENTWARE_ROOT
-		fi
-		management_operation_run storage.preflight.v1 "$output_format" "$@"
-		;;
-	storage-readiness)
-		output_format=human
-		if [ "${1:-}" = --json ]; then
-			output_format=json
-			shift
-		fi
-		[ "$#" -eq 3 ] || usage
-		# shellcheck disable=SC1091
-		. "$program_dir/../lib/nutmerlin/management-operation.sh"
-		if [ "${NUTMERLIN_ENABLE_TEST_ADAPTERS:-0}" = 1 ]; then
-			roots_are_isolated || exit 78
-		else
-			NUTMERLIN_STATUS_ROOT=/tmp/nutmerlin
-			export NUTMERLIN_STATUS_ROOT
-		fi
-		# shellcheck disable=SC1091
-		. "$program_dir/../lib/nutmerlin/storage-preflight.sh"
-		management_operation_run storage.readiness.v1 "$output_format" "$@"
-		;;
-	*)
-		usage
-		;;
+	*) usage ;;
 esac

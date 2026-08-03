@@ -6,7 +6,7 @@ Use a Linux filesystem checkout. WSL2 is supported; do not place the working tre
 
 ## 2. Host tools
 
-The repository checks require GNU Make, Bats, ShellCheck, shfmt, ripgrep, tar, gzip, and the host packages providing `dummy-ups`, `upsd`, and `upsc` for `make test-nut`.
+The repository checks require GNU Make, Bats, ShellCheck, shfmt, ripgrep, tar, gzip, `ss` from iproute2, and the host packages providing `dummy-ups`, `upsd`, and `upsc` for `make test-nut`.
 
 ```sh
 make bootstrap
@@ -15,7 +15,7 @@ make test-nut
 make package
 ```
 
-`make test-nut` is introduced and becomes mandatory in issue #14. On the planning-reset commit immediately before #14, its documented absence is expected; all other listed commands remain current.
+`make test-nut` is mandatory. It starts real NUT processes only against disposable configuration and loopback state.
 
 Bootstrap reports missing tools and never installs them. CI may install its disposable host test dependencies explicitly.
 

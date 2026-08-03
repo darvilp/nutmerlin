@@ -7,9 +7,45 @@ command_name=${1:-}
 
 require_commands() {
 	missing=0
-	for required_command in make shellcheck shfmt bats jq rg tar gzip python3; do
+	for required_command in make shellcheck shfmt bats cmp jq rg tar gzip ss; do
 		if ! command -v "$required_command" >/dev/null 2>&1; then
 			printf 'missing required host command: %s\n' "$required_command" >&2
+			missing=1
+		fi
+	done
+	[ "$missing" -eq 0 ]
+}
+
+nut_binary_is_available() {
+	nut_binary_name=$1
+	if [ -n "${NUTMERLIN_NUT_ROOT:-}" ]; then
+		for nut_binary_candidate in \
+			"$NUTMERLIN_NUT_ROOT/lib/nut/$nut_binary_name" \
+			"$NUTMERLIN_NUT_ROOT/usr/lib/nut/$nut_binary_name" \
+			"$NUTMERLIN_NUT_ROOT/sbin/$nut_binary_name" \
+			"$NUTMERLIN_NUT_ROOT/usr/sbin/$nut_binary_name" \
+			"$NUTMERLIN_NUT_ROOT/bin/$nut_binary_name" \
+			"$NUTMERLIN_NUT_ROOT/usr/bin/$nut_binary_name"; do
+			[ -x "$nut_binary_candidate" ] && return 0
+		done
+		return 1
+	fi
+
+	for nut_binary_candidate in \
+		"/lib/nut/$nut_binary_name" \
+		"/usr/lib/nut/$nut_binary_name" \
+		"/usr/sbin/$nut_binary_name" \
+		"/usr/bin/$nut_binary_name"; do
+		[ -x "$nut_binary_candidate" ] && return 0
+	done
+	command -v "$nut_binary_name" >/dev/null 2>&1
+}
+
+require_nut_binaries() {
+	missing=0
+	for required_nut_binary in dummy-ups upsd upsc; do
+		if ! nut_binary_is_available "$required_nut_binary"; then
+			printf 'missing required host NUT binary: %s\n' "$required_nut_binary" >&2
 			missing=1
 		fi
 	done
@@ -62,37 +98,49 @@ run_package() {
 	mkdir -p "$repository_root/dist"
 	temporary_archive=$(mktemp "${TMPDIR:-/tmp}/nutmerlin-core-tar.XXXXXX")
 	temporary_package=$(mktemp "${TMPDIR:-/tmp}/nutmerlin-core.XXXXXX")
-	trap 'rm -f -- "$temporary_archive" "$temporary_package"' EXIT HUP INT TERM
-	(
-		cd "$repository_root"
-		tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \
-			-cf "$temporary_archive" LICENSE bin lib
-	)
-	gzip -n -c "$temporary_archive" >"$temporary_package"
+	comparison_archive=$(mktemp "${TMPDIR:-/tmp}/nutmerlin-core-compare-tar.XXXXXX")
+	comparison_package=$(mktemp "${TMPDIR:-/tmp}/nutmerlin-core-compare.XXXXXX")
+	trap 'rm -f -- "$temporary_archive" "$temporary_package" "$comparison_archive" "$comparison_package"' EXIT HUP INT TERM
+
+	build_package() {
+		build_archive=$1
+		build_output=$2
+		(
+			cd "$repository_root"
+			tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \
+				-cf "$build_archive" LICENSE bin lib share
+		)
+		gzip -n -c "$build_archive" >"$build_output"
+	}
+
+	build_package "$temporary_archive" "$temporary_package"
 	test -x "$repository_root/bin/nutmerlin"
-	test -x "$repository_root/lib/nutmerlin/management-operation.sh"
+	test -x "$repository_root/lib/nutmerlin/result.sh"
+	test -s "$repository_root/share/dummy/cyberpower.dev"
 	package_listing=$(tar -tzf "$temporary_package")
 	test "$package_listing" = 'LICENSE
 bin/
 bin/nutmerlin
 lib/
 lib/nutmerlin/
-lib/nutmerlin/dependency-adapter.sh
-lib/nutmerlin/dependency-cohort.sh
-lib/nutmerlin/dependency-plan.sh
-lib/nutmerlin/management-operation.sh
-lib/nutmerlin/platform-eligibility.sh
-lib/nutmerlin/platform-qualification.sh
-lib/nutmerlin/storage-preflight.sh
-lib/nutmerlin/storage-qualification.sh'
+lib/nutmerlin/result.sh
+share/
+share/dummy/
+share/dummy/cyberpower.dev'
+	build_package "$comparison_archive" "$comparison_package"
+	if ! cmp -s "$temporary_package" "$comparison_package"; then
+		printf '%s\n' 'package build is not byte-deterministic' >&2
+		return 1
+	fi
 	mv -- "$temporary_package" "$repository_root/dist/nutmerlin-core-dev.tar.gz"
-	rm -f -- "$temporary_archive"
+	rm -f -- "$temporary_archive" "$comparison_archive" "$comparison_package"
 	trap - EXIT HUP INT TERM
 }
 
 case $command_name in
 	bootstrap)
 		require_commands
+		require_nut_binaries
 		printf '%s\n' 'host prerequisites are available; no system or package state changed'
 		;;
 	lint)
@@ -101,6 +149,11 @@ case $command_name in
 	test-unit)
 		require_commands
 		bats "$repository_root/test/unit"
+		;;
+	test-nut)
+		require_commands
+		require_nut_binaries
+		bats "$repository_root/test/integration/dummy-nut.bats"
 		;;
 	test-security)
 		require_commands
@@ -113,7 +166,7 @@ case $command_name in
 		run_package
 		;;
 	*)
-		printf '%s\n' 'usage: project-checks.sh bootstrap|lint|test-unit|test-security|docs-check|package' >&2
+		printf '%s\n' 'usage: project-checks.sh bootstrap|lint|test-unit|test-nut|test-security|docs-check|package' >&2
 		exit 64
 		;;
 esac
