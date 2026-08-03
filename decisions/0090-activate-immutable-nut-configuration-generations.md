@@ -1,6 +1,6 @@
 # ADR 0090: Activate immutable NUT configuration generations
 
-- Status: Accepted
+- Status: Superseded by ADR 0098
 - Date: 2026-08-02
 
 ## Context

@@ -1,6 +1,6 @@
 # ADR 0053: Recover current state without replaying network work
 
-- Status: Accepted
+- Status: Superseded by ADR 0098
 - Date: 2026-08-02
 
 ## Context

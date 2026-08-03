@@ -2,36 +2,14 @@
 
 - Status: Accepted
 - Date: 2026-08-01
-
-## Context
-
-The addon may eventually support SSH, webhooks, MQTT, WinRM, Redfish, SNMP/PDU control, alerts, and load shedding. A generic UPS name could imply that the project owns device protocols and all orchestration.
+- Updated: 2026-08-02 by ADR 0098
 
 ## Decision
 
-Use:
+Use display name **NUTMerlin**, repository/package slug `nutmerlin`, CLI `nutmerlin`, and addon root `/jffs/addons/nutmerlin`.
 
-- display name: **NUTMerlin**
-- repository/package slug: `nutmerlin`
-- CLI: `nutmerlin`
-- addon directory: `/jffs/addons/nutmerlin`
-
-NUT remains the UPS device and network protocol engine. Other mechanisms are executors consuming NUT-derived events.
+Network UPS Tools remains the only UPS protocol, driver, status, and standard-client engine. v0.1 is an integration layer for a conventional NUT server and contains no orchestration or executor runtime.
 
 ## Consequences
 
-### Positive
-
-- Immediately communicates compatibility with the NUT ecosystem.
-- Avoids duplicating NUT drivers.
-- Keeps the project client-neutral.
-- Makes the additional integrations understandable as optional extensions.
-
-### Negative
-
-- Some users may assume the addon only exposes NUT and does no orchestration.
-- Documentation must explain that SSH/webhook/MQTT/etc. are supported executors.
-
-## Revisit when
-
-Reconsider only if the project stops using NUT as its primary event/device layer.
+The product stays compatible with standard NUT clients, avoids duplicating driver/protocol work, and remains client-neutral. Future centralized orchestration requires a separate architecture review.

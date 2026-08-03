@@ -1,6 +1,6 @@
 # ADR 0052: Bound NUT and USB recovery with a circuit breaker
 
-- Status: Accepted
+- Status: Superseded by ADR 0098
 - Date: 2026-08-02
 
 ## Context

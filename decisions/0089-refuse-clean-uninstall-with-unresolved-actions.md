@@ -1,6 +1,6 @@
 # ADR 0089: Refuse clean uninstall with unresolved actions
 
-- Status: Accepted
+- Status: Superseded by ADR 0098
 - Date: 2026-08-02
 
 ## Context

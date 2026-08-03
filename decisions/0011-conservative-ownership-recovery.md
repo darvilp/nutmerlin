@@ -1,6 +1,6 @@
 # ADR 0011: Permit explicit conservative ownership recovery
 
-- Status: Accepted
+- Status: Superseded by ADR 0098
 - Date: 2026-08-01
 
 ## Context

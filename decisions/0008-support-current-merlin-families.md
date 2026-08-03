@@ -1,6 +1,6 @@
 # ADR 0008: Support both current Merlin firmware families
 
-- Status: Accepted
+- Status: Deferred research - non-authoritative for v0.1
 - Date: 2026-08-01
 
 ## Context

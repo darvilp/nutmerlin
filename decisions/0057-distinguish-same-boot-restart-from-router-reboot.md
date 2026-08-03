@@ -1,6 +1,6 @@
 # ADR 0057: Distinguish same-boot restart from router reboot
 
-- Status: Accepted
+- Status: Superseded by ADR 0098
 - Date: 2026-08-02
 
 ## Context

@@ -1,6 +1,6 @@
 # ADR 0009: Base router support on capabilities, not model allowlists
 
-- Status: Accepted
+- Status: Deferred research - non-authoritative for v0.1
 - Date: 2026-08-01
 
 ## Context

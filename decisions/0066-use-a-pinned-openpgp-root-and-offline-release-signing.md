@@ -1,6 +1,6 @@
 # ADR 0066: Use a pinned OpenPGP root and offline release signing
 
-- Status: Accepted
+- Status: Deferred research - non-authoritative for v0.1
 - Date: 2026-08-02
 
 ## Context

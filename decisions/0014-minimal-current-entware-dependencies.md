@@ -1,6 +1,6 @@
 # ADR 0014: Manage Entware dependencies minimally and target current packages
 
-- Status: Accepted
+- Status: Superseded by ADR 0098
 - Date: 2026-08-01
 
 ## Context

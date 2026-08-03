@@ -1,5 +1,7 @@
 # WinRM router client-stack qualification
 
+> Historical research only. This document is non-authoritative for v0.1; WinRM execution is deferred.
+
 Date: 2026-08-02
 
 ## Question and safety boundary

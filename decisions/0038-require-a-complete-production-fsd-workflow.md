@@ -1,6 +1,6 @@
 # ADR 0038: Require a complete production FSD workflow
 
-- Status: Accepted
+- Status: Deferred research - non-authoritative for v0.1
 - Date: 2026-08-02
 
 ## Context

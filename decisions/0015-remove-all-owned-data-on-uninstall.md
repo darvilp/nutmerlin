@@ -1,6 +1,6 @@
 # ADR 0015: Remove all NUTMerlin-owned data on uninstall
 
-- Status: Accepted
+- Status: Superseded by ADR 0098
 - Date: 2026-08-02
 
 ## Context

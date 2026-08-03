@@ -1,6 +1,6 @@
 # ADR 0005: Treat Merlin 386/ARMv7 as legacy best-effort
 
-- Status: Accepted
+- Status: Deferred research - non-authoritative for v0.1
 - Date: 2026-08-01
 
 ## Context

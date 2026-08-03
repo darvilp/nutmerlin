@@ -1,6 +1,6 @@
 # ADR 0021: Permit native NUT credentials on the trusted LAN
 
-- Status: Accepted
+- Status: Superseded by ADR 0098
 - Date: 2026-08-02
 
 ## Context

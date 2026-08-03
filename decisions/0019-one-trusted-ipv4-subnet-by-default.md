@@ -1,6 +1,6 @@
 # ADR 0019: Admit one confirmed trusted IPv4 subnet by default
 
-- Status: Accepted
+- Status: Superseded by ADR 0098
 - Date: 2026-08-02
 
 ## Context

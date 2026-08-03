@@ -1,6 +1,6 @@
 # ADR 0086: Use one authoritative source and isolate simulation
 
-- Status: Accepted
+- Status: Superseded by ADR 0098
 - Date: 2026-08-02
 
 ## Context

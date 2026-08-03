@@ -1,6 +1,6 @@
 # ADR 0017: Require pinned-key signatures for every release
 
-- Status: Accepted
+- Status: Deferred research - non-authoritative for v0.1
 - Date: 2026-08-02
 
 ## Context

@@ -1,5 +1,7 @@
 # Merlin and amtm WebUI packaging practice
 
+> Historical research only. This document is non-authoritative for v0.1; the WebUI is deferred.
+
 Date: 2026-08-02
 
 ## Question and classification

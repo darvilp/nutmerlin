@@ -2,29 +2,14 @@
 
 - Status: Accepted
 - Date: 2026-08-01
-
-## Context
-
-NUTMerlin can record that it installed an Entware package, but package installation does not grant exclusive ownership. Administrators, scripts, and other addons may use a package without declaring a package-manager dependency, so automatic removal can disrupt unrelated services.
+- Updated: 2026-08-02 by ADR 0098
 
 ## Decision
 
-Normal uninstall removes zero Entware packages.
+NUTMerlin v0.1 never installs, upgrades, repairs, or removes Entware packages. It records only the package names and versions observed by its read-only compatibility check.
 
-- Record for every dependency whether it predated NUTMerlin or was installed by this installation, including the observed version.
-- Normal uninstall removes only NUTMerlin-owned services, files, hook blocks, firewall rules, generated configuration, and other managed integration artifacts.
-- Uninstall reports retained packages and their recorded provenance.
-- Package removal is available only through a separate explicit package-cleanup operation with a mandatory dry-run and administrator confirmation.
-- Cleanup may consider only packages installed by the same NUTMerlin installation, with intact provenance, no declared reverse dependencies, no detected foreign NUT deployment or process, and no conflicting evidence.
-- Any uncertainty retains the package.
-- A package that predated NUTMerlin is never eligible merely because it appears in a generated dependency manifest.
+Disable, repair, update, and uninstall modify only attributable NUTMerlin code, configuration, credentials, hook blocks, scheduled job, firewall objects, and volatile state. Every Entware package is retained. There is no package-cleanup operation.
 
 ## Consequences
 
-- A normal uninstall can leave unused NUT packages on Entware storage.
-- Removing addon integration is safer and repeatable without relying on incomplete package-usage metadata.
-- Users who want package removal receive an auditable, separately confirmed cleanup path.
-
-## Rejected alternative
-
-Automatically removing packages recorded as NUTMerlin-installed would produce a tidier default uninstall, but package-manager dependency checks cannot prove that no administrator script or unrelated addon uses them.
+Administrators manage Entware dependencies separately. Uninstall may leave packages that are no longer needed, avoiding disruption to shared package users.

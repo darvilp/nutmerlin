@@ -1,6 +1,6 @@
 # ADR 0071: Defer target restoration actions to Later
 
-- Status: Accepted
+- Status: Deferred research - non-authoritative for v0.1
 - Date: 2026-08-02
 
 ## Context

@@ -1,6 +1,6 @@
 # ADR 0031: Run P0 local scripts under an unprivileged identity
 
-- Status: Accepted
+- Status: Deferred research - non-authoritative for v0.1
 - Date: 2026-08-02
 
 ## Context

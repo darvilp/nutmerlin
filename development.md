@@ -1,289 +1,91 @@
-# NUTMerlin development workflow
+# NUTMerlin v0.1 development guide
 
-## 1. Primary and portable environments
+## 1. Workspace
 
-The primary maintainer environment is:
+Use a Linux filesystem checkout. WSL2 is supported; do not place the working tree under `/mnt/c` for normal Linux tooling. Normal development needs no router, UPS, Windows shutdown agent, or WSL USB passthrough.
 
-- Windows 11 host;
-- WSL2 Linux distribution;
-- Codex IDE beta attached to the WSL workspace;
-- Git and GitHub CLI inside WSL;
-- Docker or Podman for disposable NUT and protocol test systems.
+## 2. Host tools
 
-The repository and all normal tests must also work on an ordinary Linux host. WSL-specific behavior belongs in development/test guidance, never in the router runtime contract.
+The repository checks require GNU Make, Bats, ShellCheck, shfmt, ripgrep, tar, gzip, and the host packages providing `dummy-ups`, `upsd`, and `upsc` for `make test-nut`.
 
-Store the working tree in the Linux filesystem:
+```sh
+make bootstrap
+make test
+make test-nut
+make package
+```
 
-    mkdir -p ~/src
-    cd ~/src
-    git clone git@github.com:darvilp/nutmerlin.git
-    cd nutmerlin
+`make test-nut` is introduced and becomes mandatory in issue #14. On the planning-reset commit immediately before #14, its documented absence is expected; all other listed commands remain current.
 
-Do not use /mnt/c as the normal working tree for Linux tools. It introduces avoidable filesystem, permission, line-ending, and performance differences.
+Bootstrap reports missing tools and never installs them. CI may install its disposable host test dependencies explicitly.
 
-## 2. Documentation and decision authority
+## 3. Ticket workflow
 
-Before changing product behavior, read:
+1. Verify branch, starting commit, clean/dirty paths, issue body/comments, and native blockers.
+2. Read root documents in `AGENTS.md` order and relevant active ADRs.
+3. Identify the public behavior seam: CLI, generated config, real NUT process chain, installer root, or Merlin adapter.
+4. Add one failing behavioral test.
+5. Implement only enough to pass it; repeat vertically.
+6. Run focused and applicable full checks.
+7. Review Standards and Specification separately against the starting commit.
+8. Make one focused commit, push normally, add evidence, then close the ticket.
 
-1. AGENTS.md;
-2. requirements.md;
-3. architecture.md;
-4. security.md;
-5. testing.md;
-6. hardware.md;
-7. the relevant accepted ADRs under decisions/.
+Do not combine tickets, implement future abstractions, or work concurrently in the shared worktree.
 
-Use root CONTEXT.md for canonical domain terminology. decisions/ is the only ADR hierarchy; do not create docs/adr or another parallel structure.
+## 4. Isolated roots
 
-Behavior changes must update the affected requirements, architecture, security invariants, tests, milestone boundary, backlog, and ADR when a genuinely new hard-to-reverse decision is made. Code must not silently override accepted documentation.
+Host tests set private paths for JFFS, Entware configuration, transient state, and platform command shims. Production code must accept those roots only when the explicit test-adapter gate is enabled and all roots are inside the harness's private temporary directory.
 
-## 3. Host prerequisites
+The harness must make it impossible to mutate real `/jffs`, `/opt`, firewall, cron, router services, or package state. NUT integration uses real NUT binaries but disposable configuration, state, PID, and socket paths.
 
-An Ubuntu/Debian development host normally needs:
+## 5. Runtime dependencies
 
-    sudo apt update
-    sudo apt install -y \
-      git gh make shellcheck shfmt bats jq ripgrep curl \
-      openssh-client rsync netcat-openbsd \
-      python3 python3-venv smartmontools f3
+NUTMerlin treats Entware as shared and preexisting. It checks these NUT roots and their actual required binaries/options:
 
-Install Docker or Podman according to the host environment; the project should not require both.
+- `nut`
+- `nut-common`
+- `nut-server`
+- `nut-upsc`
+- `nut-driver-dummy-ups`
+- `nut-driver-usbhid-ups`
 
-NUT/Entware binaries used for release qualification come from the exact test cohort, not from whatever host package happens to be installed.
+The product does not lock the transitive feed, invoke package mutation, or claim compatibility solely from version strings. A missing requirement produces an exact command suggestion for the administrator to review and run separately.
 
-## 4. Stable repository command surface
+No router runtime dependency may be added without an accepted decision.
 
-The implemented host-safe command surface is:
+## 6. Shell conventions
 
-    make bootstrap
-    make lint
-    make test
-    make test-unit
-    make test-security
-    make docs-check
-    make package
+- Use POSIX `/bin/sh`, `set -eu`, quoted expansions, and private fixed roots.
+- Use `mkdir` locks rather than assuming `flock`.
+- Do not use `eval`, Bash arrays, process substitution, here-strings, or sourced mutable configuration.
+- Validate identifiers, addresses, CIDRs, paths, numeric fields, USB attributes, and archive names before use.
+- Wrap platform commands in the platform adapter.
+- Keep JSON rendering bounded and correctly escaped without requiring router-side `jq`.
+- Send diagnostics to stderr when stdout carries structured results or a once-only secret.
 
-`make bootstrap` checks host prerequisites and never installs or changes them.
-The remaining commands operate only on the checkout and disposable host-test
-roots. `make test-nut` will be added with the isolated `dummy-ups` integration
-ticket; it is not an alias for host-unit evidence.
+## 7. Development installation
 
-The first complete local CLI operation is:
+`make install DESTDIR=<private-root>` installs the exact layout without touching the host system. `make package` creates a local deterministic archive containing the same files.
 
-    bin/nutmerlin self-check
-    bin/nutmerlin self-check --json
+For the production-reference router, copy the archive through an existing administrator channel and run its local installer only with:
 
-The JSON result schema is `nutmerlin.management-result.v1`, and the versioned
-operation identifier is `core.self-check.v1`. Current stable exit classes are
-`success` (process status 0), `usage` (64), and `configuration` (78). The
-self-check creates disposable isolated roots when the harness has not supplied
-them. It performs no router, firewall, service, Entware, NUT, WebUI, or hardware
-mutation.
+```sh
+NUTMERLIN_ALLOW_PRODUCTION_ROUTER=1 ./install.sh
+```
 
-Platform eligibility uses the same local controller:
+The installer never downloads code or changes Entware packages. Preserve a separate router recovery path and inspect all proposed hook/firewall changes before the first test.
 
-    bin/nutmerlin platform-eligibility
-    bin/nutmerlin platform-eligibility --json
+## 8. Hardware progression
 
-Operation `platform.eligibility.v1` reports support classification separately from installation disposition. The version-controlled production qualification profile initially names no qualified firmware release; support claims remain absent until release evidence supplies exact versions. Native semantic probes that have not been qualified report `unknown`. Host simulations are explicitly labeled and cannot create production qualification evidence or authorize installation.
+1. Host unit and real dummy integration.
+2. Simulated Merlin lifecycle.
+3. RT-AX86U Pro with dummy.
+4. CP1500PFCLCD read-only on the router.
+5. Trusted-LAN `upsc`.
+6. Standard secondary-client authentication.
 
-Storage qualification uses `bin/nutmerlin storage-preflight [--json] TRANSACTION_BYTES TEMPORARY_BYTES`. The package or release planner supplies the two closed, non-negative byte counts; preflight refuses missing, malformed, or uncomputable sizing rather than deriving it from ambient environment state. Native execution inspects `/opt` directly. Host profiles exercise `storage.preflight.v1` only inside isolated roots and cannot authorize mutation. The internal late-mount decision seam is `storage-readiness [--json] ELAPSED LAST_PROBE absent|ready|started|failed`; its same-boot claim prevents duplicate authorization and `failed` explicitly permits a retry without starting a service directly.
+Never infer a later layer from an earlier one. The RT-AC3100 and other device/firmware combinations are post-v0.1 research.
 
-Dependency planning uses:
+## 9. Debugging and evidence
 
-    bin/nutmerlin dependency-plan [--json] interactive [current|keep-compatible] [none|ssh]
-    bin/nutmerlin dependency-plan [--json] unattended none|current|keep-compatible [none|ssh]
-    bin/nutmerlin dependency-plan [--json] uninstall
-
-Operation `dependency.plan.v1` is a dry-run and never invokes `opkg`. Interactive planning defaults to `current`; unattended `none` emits but refuses any required mutation. The only initial optional capability is `ssh`. Host adapter evidence always exits with configuration refusal even when the calculated plan is otherwise coherent, so it cannot authorize shared Entware changes. Current AArch64 binary execution, configuration behavior, and `dummy-ups` smoke remain separate package/ABI evidence and must not be inferred from host fixtures.
-
-Optional manually invoked hardware/evidence commands should use explicit profiles:
-
-    make router-probe PROFILE=ac3100
-    make deploy PROFILE=ac3100
-    make router-smoke PROFILE=ac3100
-    make router-report PROFILE=ac3100
-
-Production hardware requires:
-
-    NUTMERLIN_ALLOW_PRODUCTION_ROUTER=1 make deploy PROFILE=ax86u-pro
-
-An actual host-shutdown test requires:
-
-    NUTMERLIN_ALLOW_HOST_SHUTDOWN=1
-
-NUTMERLIN_ALLOW_UPS_COMMANDS may gate future harmless administrative test scaffolding, but it does not authorize load.off, shutdown.*, outlet actions, Redfish ForceOff, or any output-control operation through P2.
-
-No default target may:
-
-- deploy or mutate a router;
-- modify the RT-AX86U Pro;
-- shut down a host;
-- issue a writable UPS/PDU command;
-- require a router, UPS, BMC, or Windows machine;
-- install dependencies on a shared Entware system.
-
-## 5. Local configuration and sensitive values
-
-Do not commit:
-
-- router addresses or source subnets;
-- usernames;
-- private keys, passwords, bearer/HMAC values, or NUT credentials;
-- certificate/CA/pin material;
-- physical device serials;
-- target labels/topology;
-- local filesystem paths.
-
-Use ignored local profiles, for example:
-
-    .env.local
-    config/local/router-ac3100.conf
-
-An ordinary non-secret profile may contain:
-
-    NUTMERLIN_ROUTER_HOST=nutmerlin-ac3100
-    NUTMERLIN_ROUTER_PORT=22
-    NUTMERLIN_ROUTER_USER=admin
-    NUTMERLIN_ROUTER_CLASS=legacy-test
-    NUTMERLIN_ROUTER_PRODUCTION=0
-
-Keep developer SSH private keys in the normal protected SSH store and pin the independently verified host fingerprint. Local test credentials must never be reused on production hardware.
-
-## 6. Normal development loop
-
-For each bounded change:
-
-1. Identify the controlling requirement and ADR.
-2. Add or update the smallest hardware-free test that demonstrates the behavior or safety invariant.
-3. Change only the relevant platform-neutral module or narrow adapter.
-4. Run focused tests, then the required stable command set.
-5. Verify no unrelated worktree changes, secret, endpoint, or hardware dependency entered the change.
-6. Update affected documentation and evidence claims.
-7. Review standards and specification conformance before committing.
-
-Do not claim:
-
-- a test passed when a dependency or hardware layer was skipped;
-- an emulator/container result qualifies a router;
-- a router dummy-ups result qualifies a physical UPS;
-- one physical UPS report qualifies all telemetry;
-- a network disconnect proves a host is Off;
-- a dry-run grants production authority.
-
-## 7. Platform-neutral implementation boundary
-
-All normal logic should run under isolated host roots and named platform adapters.
-
-Direct Merlin calls belong behind adapter functions for:
-
-- NVRAM;
-- firmware/Addons API;
-- optional WebUI component mounting, removal, and service-event integration;
-- user-script hooks;
-- firewall inspection/application;
-- mount/storage identity;
-- services/processes;
-- accounts/privilege;
-- boot/time synchronization;
-- syslog/resource limits.
-
-Runtime shell is POSIX /bin/sh unless a component’s accepted contract says otherwise. Do not assume Bash.
-
-The host harness must make it impossible to alter the developer’s real /jffs, /opt, web root, firewall, services, or opkg state.
-
-## 8. Entware development rules
-
-NUTMerlin treats Entware as a shared prerequisite.
-
-During normal host work:
-
-- simulate opkg plans and failures;
-- use disposable roots/containers for package mutation;
-- do not run blanket upgrade;
-- do not pin an old package as the compatibility solution;
-- do not vendor/private-build NUT;
-- test a coherent older cohort only as compatibility-only;
-- record exact package provenance.
-
-During release qualification, execute the current supported AArch64 cohort, including gpgv2 and every advertised optional dependency. Recheck feed contents at release time.
-
-Never bootstrap, format, repair, or replace Entware as a NUTMerlin development side effect.
-
-## 9. WSL networking
-
-Default WSL2 NAT is normally sufficient for outbound SSH and NUT queries to LAN targets:
-
-    ssh admin@nutmerlin-ac3100
-    nc -vz nutmerlin-ac3100 3493
-    upsc ups@nutmerlin-ac3100
-
-Mirrored networking is optional and only needed when a LAN test target must initiate traffic into WSL or host NAT/VPN behavior prevents the required path.
-
-For a webhook/MQTT test service:
-
-- prefer same-environment/container traffic;
-- expose through the Windows host only with an exact temporary firewall rule; or
-- use mirrored networking for the named test.
-
-Never weaken Windows, Hyper-V, router, or LAN firewall policy globally to simplify a test.
-
-## 10. USB access from WSL2
-
-Direct WSL USB is optional. The normal development source is dummy-ups, and the normal physical source attaches to a gated ASUS router.
-
-For a deliberate experiment, usbipd-win may attach a device to WSL. Record that the UPS cannot simultaneously be owned by PowerPanel, a native Windows NUT client, and the WSL driver.
-
-Direct WSL USB must not become a CI, release, or contributor prerequisite.
-
-## 11. Router profiles and gates
-
-### mock
-
-Host filesystem, process, network, clock, and Merlin-command shims. This is the normal development profile.
-
-### current-3004 and current-3006
-
-Simulated capability profiles representing the currently qualified firmware-family contracts. Their behavior is test data, not exact hardware qualification.
-
-### ac3100
-
-Optional legacy Merlin 386/ARMv7 profile. It may be skipped when unavailable or uninformative. Use dummy-ups first, isolate internet egress, and store no reusable production secret.
-
-### ax86u-pro
-
-Production-reference exact-hardware profile. Every deployment or mutation requires NUTMERLIN_ALLOW_PRODUCTION_ROUTER=1 and a task-specific safety checklist.
-
-### physical UPS profiles
-
-Each physical profile identifies exact device/driver/NUT evidence and begins read-only. It never enables a writable/output command.
-
-## 12. Native Windows client tests
-
-Use a native Windows NUT client/service for production-style client-local behavior; WSL2 is not the shutdown agent.
-
-Progression:
-
-1. read-only query;
-2. restricted secondary authentication;
-3. harmless local marker;
-4. short-outage cancellation;
-5. long-outage local action;
-6. optional actual graceful shutdown with the explicit gate and saved work.
-
-Keep protocol-level client-neutral tests even when one particular Windows client is used. Hibernation is outside P0–P2.
-
-## 13. Repository and review workflow
-
-Project defaults:
-
-- public darvilp/nutmerlin;
-- GPL-3.0-or-later;
-- GitHub Actions host CI;
-- protected main;
-- feature branches and draft pull requests;
-- manual hardware workflows outside ordinary PR gates.
-
-Preserve unrelated dirty-worktree changes. Stage only intended paths. A milestone/capability is not complete because files exist; every applicable exit gate in plan.md and evidence rule in testing.md must pass.
-
-Release artifacts are produced by CI, authenticated offline, and installed only through the signed-manifest contract. Development convenience never bypasses first-install, safe-window, rollback, or release-root requirements.
+Record exact commands, exit status, versions, fixture/profile, and evidence layer. Redact secrets, full serials, usernames, and reusable network details before publishing. A client disconnect is not host-Off evidence, and a successful build is not router proof.

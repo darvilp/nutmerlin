@@ -1,6 +1,6 @@
 # ADR 0045: Use conservative observation freshness and debounce
 
-- Status: Accepted
+- Status: Deferred research - non-authoritative for v0.1
 - Date: 2026-08-02
 
 ## Context

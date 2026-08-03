@@ -1,6 +1,6 @@
 # ADR 0012: Use journaled two-slot install and upgrade activation
 
-- Status: Accepted
+- Status: Superseded by ADR 0098
 - Date: 2026-08-01
 
 ## Context

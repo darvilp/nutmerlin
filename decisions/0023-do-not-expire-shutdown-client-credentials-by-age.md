@@ -1,6 +1,6 @@
 # ADR 0023: Do not expire shutdown-client credentials by age
 
-- Status: Accepted
+- Status: Superseded by ADR 0098
 - Date: 2026-08-02
 
 ## Context

@@ -1,6 +1,6 @@
 # ADR 0064: Require layered hardware-free release evidence
 
-- Status: Accepted
+- Status: Superseded by ADR 0098
 - Date: 2026-08-02
 
 ## Context

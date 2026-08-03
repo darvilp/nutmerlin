@@ -1,6 +1,6 @@
 # ADR 0024: Commit before nonrepeatable action dispatch
 
-- Status: Accepted
+- Status: Deferred research - non-authoritative for v0.1
 - Date: 2026-08-02
 
 ## Context

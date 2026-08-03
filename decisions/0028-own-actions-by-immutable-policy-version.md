@@ -1,6 +1,6 @@
 # ADR 0028: Own actions by an immutable policy version
 
-- Status: Accepted
+- Status: Deferred research - non-authoritative for v0.1
 - Date: 2026-08-02
 
 ## Context

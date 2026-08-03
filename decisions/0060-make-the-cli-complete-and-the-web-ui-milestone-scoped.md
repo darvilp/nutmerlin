@@ -1,6 +1,6 @@
 # ADR 0060: Make the CLI complete and the web UI milestone scoped
 
-- Status: Accepted
+- Status: Superseded by ADR 0098
 - Date: 2026-08-02
 
 ## Context

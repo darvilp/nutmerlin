@@ -1,6 +1,6 @@
 # ADR 0077: Pin SSH identity with current Entware OpenSSH
 
-- Status: Accepted
+- Status: Deferred research - non-authoritative for v0.1
 - Date: 2026-08-02
 
 ## Context

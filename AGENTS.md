@@ -1,180 +1,89 @@
-# AGENTS.md — Codex and contributor instructions
+# AGENTS.md — NUTMerlin contributor instructions
 
 ## Mission
 
-Build NUTMerlin as a safe Asuswrt-Merlin integration layer around Entware-provided Network UPS Tools. Do not create a new UPS protocol implementation.
+Build NUTMerlin v0.1 as a conventional Asuswrt-Merlin integration around Entware-provided Network UPS Tools. The product is a NUT server add-on, not a UPS protocol implementation or a centralized shutdown orchestrator.
+
+The v0.1 path is:
+
+```text
+UPS -> Entware NUT on the Merlin router -> standard NUT secondary client
+    -> client performs its own local shutdown
+```
 
 ## Read first
 
-Before changing code, read:
+Before changing code for a ticket, read in this order:
 
 1. `CONTEXT.md`
 2. `requirements.md`
 3. `architecture.md`
 4. `security.md`
 5. `testing.md`
-6. `hardware.md` and `development.md`
-7. The relevant ADRs under `decisions/`
+6. `hardware.md`
+7. `development.md`
+8. `plan.md`
+9. Active ADRs listed in `decisions/README.md`
 
-Accepted ADRs control when a summary is less precise. When requirements still conflict, safety and explicit acceptance criteria take precedence.
+Only ADRs listed as active in `decisions/README.md` are binding for v0.1. Historical and deferred ADRs are not implementation requirements. Requirements define behavior, active ADRs settle durable trade-offs, architecture describes the implementation, security constrains it, testing defines evidence, and plan defines order.
 
+## Environment and hardware
 
-## Maintainer environment and hardware policy
+- The primary workspace is the WSL2 Linux filesystem; do not assume `/mnt/c`.
+- Normal tests require neither an ASUS router nor a physical UPS.
+- Real `dummy-ups` is the default development source and remains loopback-only.
+- The RT-AX86U Pro is the exact production-reference router. Any deployment or modification requires `NUTMERLIN_ALLOW_PRODUCTION_ROUTER=1`.
+- The CyberPower CP1500PFCLCD is the first physical reference UPS.
+- The RT-AC3100 and other router or UPS models are outside the v0.1 critical path.
+- WSL2 is not a native Windows shutdown agent. Direct USB attachment to WSL is optional.
 
-- The primary maintainer environment is Codex IDE beta with the repository stored in the WSL2 Linux filesystem.
-- Do not assume `/mnt/c` is the working tree.
-- All normal tests must pass without an ASUS router or physical UPS.
-- `dummy-ups` is the default UPS source for development.
-- The RT-AC3100 is an optional legacy 386/ARMv7 target; do not block work waiting for it.
-- The RT-AX86U Pro is a production-reference target and requires `NUTMERLIN_ALLOW_PRODUCTION_ROUTER=1` for deployment or modification.
-- WSL2 is not the native Windows shutdown agent.
-- Direct USB attachment to WSL is optional and must not become a project dependency.
+## Runtime constraints
 
-## Core constraints
+- Target POSIX `/bin/sh`; do not assume Bash.
+- Use Entware NUT for drivers, `upsd`, `upsc`, and standard client semantics.
+- Keep substantial code in `/jffs/addons/nutmerlin` and only small delimited blocks in Merlin user-script hooks.
+- Do not permanently patch firmware files.
+- Treat healthy preexisting Entware as a shared prerequisite. Never bootstrap, repair, upgrade, or remove Entware packages automatically.
+- Treat `/opt` as fallible. Keep high-frequency state and logs in `/tmp`, and do not write persistent state on every poll.
+- Refuse foreign or ambiguously owned NUT deployments instead of adopting or overwriting them.
+- Use complete owned NUT configuration sets selected atomically through `NUT_CONFPATH`, retaining only current and last-known-good.
+- Keep the runtime small: an invoked CLI, narrow shell modules, NUT processes, Merlin hooks, and one periodic reconciler. Do not add a NUTMerlin daemon, database, journal, worker queue, or orchestration engine.
 
-- Target POSIX `/bin/sh` compatible with Asuswrt-Merlin unless a component explicitly documents another runtime.
-- Do not assume Bash.
-- Do not patch or replace firmware files permanently.
-- Use Merlin Addons API and user-script hooks.
-- Keep substantial logic in `/jffs/addons/nutmerlin`; insert only small dispatch blocks into `/jffs/scripts/*`.
-- Treat healthy preexisting Entware as a shared prerequisite; never bootstrap, format, repair, or own Entware.
-- Treat `/opt` as fallible persistent storage that may be absent, late, read-only, or replaced.
-- Avoid frequent writes to JFFS or Entware media; no persistent write on every UPS poll.
-- Never store secrets in `custom_settings.txt`, JavaScript, generated status pages, logs, or command-line arguments where avoidable.
-- Bind NUT to one explicitly confirmed trusted IPv4 scope by default and verify both listener and firewall admission.
-- Never expose NUT to WAN by default, and expose no standalone addon-management listener through P2.
-- Do not register `load.off`, `shutdown.*`, PDU outlet control, Redfish `ForceOff`, restoration, or equivalent abrupt/output operations through P2.
-- Do not use NUT FSD as a cancelable outage timer.
-- Production FSD remains unavailable until its complete lifecycle is separately accepted and qualified.
-- Distinguish reversible outage actions from committed shutdown actions.
-- Use one authoritative real UPS source through P2; keep `dummy-ups` distinct, loopback-only, and unable to inherit production authority.
-- Do not assume a UPS reports reliable runtime, charge, voltage, or load values.
-- Do not assume a client disconnect proves the operating system has powered off.
-- The addon must remain client-neutral; WinNUT is one client example, not a runtime dependency or router-side executor.
-- Fresh installs and upgrades remain monitoring-only.
-- No transport may downgrade identity, encryption, protocol version, or address scope automatically.
+## Safety constraints
 
-## Safety rules for tests
+- Fresh installs and upgrades are monitoring-only.
+- Keep dummy distinct, loopback-only, and unable to replace a real source automatically.
+- Select a physical UPS by stable unique identity, never first match, bus number, or device number.
+- Bind external NUT only to one explicitly configured router IPv4 address and one trusted IPv4 CIDR. Verify listener and firewall rules together. Never expose to WAN or wildcard addresses.
+- Generate one restricted `upsmon secondary` credential per client. Store secrets in root-only files and show new secrets once.
+- Do not expose arbitrary shell, raw driver options, raw NUT configuration, writable UPS variables, instant commands, FSD, output control, PDU operations, remote shutdown executors, or addon-management listeners.
+- Never run network-facing `upsd` as root.
+- Missing or ambiguous source, storage, configuration, ownership, listener, firewall, or credential state fails closed without disrupting unrelated router networking.
 
-- Default all executors to dry-run.
-- CI and simulator tests must use harmless marker commands.
-- Real-router tests must use `dummy-ups` unless the test explicitly requires the real UPS.
-- Real-UPS tests begin read-only.
-- Real-router tests must tolerate missing or read-only `/opt` without destructive action.
-- No automated test may issue a UPS output-off command.
-- Tests that can shut down a host must require an explicit environment variable or physical confirmation gate.
-- Test scripts must refuse to run destructive stages when the target is the production router unless an override is supplied.
-- A failed or ambiguous source, policy, binding, action, storage, network, or ownership state must fail closed.
+## Test safety
 
-Suggested gate names:
+- Host and simulated-router tests use isolated roots and harmless process/firewall shims.
+- Real NUT integration uses `dummy-ups` on loopback.
+- Real-router tests use dummy first and require the production-router gate.
+- Physical-UPS tests begin read-only and must not issue writable variables, instant commands, FSD, output-off, or deep-discharge operations.
+- Host-shutdown testing is outside the v0.1 release gate. Any later such test requires `NUTMERLIN_ALLOW_HOST_SHUTDOWN=1`.
+- `NUTMERLIN_ALLOW_UPS_COMMANDS=1` does not authorize any v0.1 operation; v0.1 registers no UPS command.
 
-```text
-NUTMERLIN_ALLOW_HOST_SHUTDOWN=1
-NUTMERLIN_ALLOW_UPS_COMMANDS=1
-NUTMERLIN_ALLOW_PRODUCTION_ROUTER=1
-```
+## Implementation discipline
 
-`NUTMERLIN_ALLOW_UPS_COMMANDS` does not register or authorize any output-control operation through P2.
+- Work one GitHub ticket at a time using native issue dependencies as blocking authority.
+- Start each ticket from a recorded clean commit and preserve unrelated changes and WIP branches.
+- Establish failing behavior at the public CLI, generated configuration, real NUT process chain, or isolated Merlin adapter seam before implementation when practical.
+- Make the smallest coherent change that proves the ticket's observable acceptance criteria.
+- Run focused checks, the applicable full host gates, and separate Standards and Specification reviews.
+- Use one focused commit per completed ticket, push normally, add evidence, and close only after push and acceptance evidence.
+- Do not merge, force-push, publish a release, delete WIP branches, or close umbrella issue #2.
+- Escalate only a genuine new architecture, public interface, persistence/configuration, deployment, safety, or runtime-dependency decision.
 
-## Implementation shape
+## Complexity stopping rules
 
-Prefer small modules with narrow interfaces:
+Stop and require a new architecture review if work proposes centralized actions, policy execution, FSD, a WebUI, a persistent event journal, multiple background workers, concurrent scheduling, a new runtime dependency, or a general transaction manager. If centralized orchestration returns later, evaluate a small compiled controller instead of growing the shell lifecycle code into that role.
 
-- platform detection
-- Entware/package management
-- ownership and release lifecycle
-- immutable NUT configuration generation
-- NUT source/service lifecycle
-- status collection
-- policy evaluation
-- action coordination and execution broker
-- optional web UI adapter
-- operational history and safety journal
+## Issue tracker
 
-Keep policy evaluation independent from Merlin and NUT process management so it can be unit-tested on a normal Linux host. Keep privileged lifecycle and broker operations separate from unprivileged status, policy, and UI work.
-
-## Configuration
-
-- Generate complete immutable NUT configuration generations from a validated internal model.
-- Render into a new private generation, validate, set ownership/mode, hash/seal, and atomically select it.
-- Resolve one exact generation per service epoch and set `NUT_CONFPATH` for every managed NUT process.
-- Retain only active and last-known-good sealed generations after staging.
-- Preserve user-owned files unless NUTMerlin created and tracks them.
-- Refuse ambiguous ownership rather than overwriting a preexisting manual NUT deployment.
-- Validate all hostnames, addresses, usernames, typed operation values, paths, durations, thresholds, and identifiers.
-- Never interpolate untrusted input into a shell command.
-- Store complex target and policy data in dedicated files under `/jffs/addons/nutmerlin` or `/opt/etc/nutmerlin`, not in the shared 8 KB addon settings store.
-
-## Executor contract
-
-Every executor should implement the conceptual operations:
-
-```text
-validate(target, action)
-test(target, action)
-execute(target, action, event)
-verify(target, action, execution_result)
-describe_capabilities()
-```
-
-Execution results must include:
-
-- executor name
-- target ID
-- policy ID
-- event ID
-- policy and operation version
-- start and finish timestamps
-- dry-run flag
-- exit/result status
-- retry count
-- evidence grade
-- redacted diagnostic message
-
-Do not expose arbitrary shell execution through the UI or CLI. Shutdown-client onboarding is not an executor. Local scripts are imported immutable POSIX-shell artifacts and are available only on platform profiles that qualify unprivileged execution, resource/process containment, and no network egress without root fallback.
-
-## Coding and test quality
-
-Expected checks:
-
-- repository under the WSL Linux filesystem for Linux-tool workflows
-- `shellcheck`
-- `shfmt -d`
-- unit tests for parsing, validation, state transitions, and config generation
-- integration tests against NUT `dummy-ups`
-- golden-file tests for generated configuration
-- manually gated install/upgrade/uninstall tests on an optional Merlin router when available
-- security tests for input injection and interface binding
-
-Do not mark a milestone complete by code presence alone. Meet the exit criteria in `plan.md`.
-
-## Documentation changes
-
-Update requirements, architecture, security, tests, and ADRs when behavior changes. Avoid silently changing semantics in code.
-
-## Open questions
-
-Do not invent answers for unresolved product decisions. Record research in `backlog.md`; create a new ADR under `decisions/` only when a hard-to-reverse trade-off is actually settled. Current unresolved subjects include:
-
-- two independent release-root fingerprint publication channels and emergency root replacement
-- platform evidence for same-boot clock synchronization and Merlin web nonce integration
-- platform qualification for unprivileged/no-egress local scripts
-- optional NUT TLS interoperability
-- a reproducible Entware WinRM client stack and target Off verification
-- Redfish BMC roles that permit GracefulShutdown while denying broader power authority
-- additional NUT driver and non-ext4 storage profiles
-- the separately deferred production FSD, output control, restoration, direct SNMP/PDU, multi-source, scheduling, and catalog models
-
-## Agent skills
-
-### Issue tracker
-
-Issues and PRDs are tracked in GitHub Issues for `darvilp/nutmerlin`. See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-The five canonical triage roles use their default label names. See `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-This is a single-context repository: use root `CONTEXT.md` and ADRs under `decisions/`. See `docs/agents/domain.md`.
+Issues and PRDs are tracked in GitHub for `darvilp/nutmerlin`. Follow `docs/agents/issue-tracker.md`; canonical triage labels are documented in `docs/agents/triage-labels.md`.

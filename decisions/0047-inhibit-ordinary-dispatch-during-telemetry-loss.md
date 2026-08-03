@@ -1,6 +1,6 @@
 # ADR 0047: Inhibit ordinary dispatch during telemetry loss
 
-- Status: Accepted
+- Status: Deferred research - non-authoritative for v0.1
 - Date: 2026-08-02
 
 ## Context

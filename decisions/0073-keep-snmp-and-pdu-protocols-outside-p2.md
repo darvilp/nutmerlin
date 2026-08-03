@@ -1,6 +1,6 @@
 # ADR 0073: Keep direct SNMP and PDU protocols outside P2
 
-- Status: Accepted
+- Status: Deferred research - non-authoritative for v0.1
 - Date: 2026-08-02
 
 ## Context

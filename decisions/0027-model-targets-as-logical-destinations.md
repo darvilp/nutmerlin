@@ -1,6 +1,6 @@
 # ADR 0027: Model targets as logical destinations with executor bindings
 
-- Status: Accepted
+- Status: Deferred research - non-authoritative for v0.1
 - Date: 2026-08-02
 
 ## Context

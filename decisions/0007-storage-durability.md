@@ -2,22 +2,18 @@
 
 - Status: Accepted
 - Date: 2026-08-01
-
-## Context
-
-USB flash drives used for router addons can fail from write wear, controller quality, unsafe removal, or corruption. Consumer flash drives often expose no useful health or endurance data.
+- Updated: 2026-08-02 by ADR 0098
 
 ## Decision
 
-- Prefer a USB-attached SSD for always-on deployments.
-- Permit qualified flash media for intermittent test rigs.
-- Do not require swap.
-- Keep high-frequency status in `/tmp`.
-- Bound and rotate persistent logs.
-- Persist only configuration, migrations, event transitions, and limited audit records.
-- Detect missing or read-only `/opt` and fail safely.
-- Make installation reproducible and configuration exportable.
+- Prefer reliable always-on storage but do not make media certification part of the product.
+- Keep code needed for diagnosis and safe shutdown under `/jffs/addons/nutmerlin`.
+- Keep owned NUT configuration and credentials under `/opt/etc/nutmerlin`.
+- Keep PID, socket, lock, retry, status, and log data under `/tmp/nutmerlin`.
+- Persist only installation identity, enabled state, source/LAN/client settings, and current/last-known-good configuration.
+- Detect missing, late, read-only, replaced, or ownership-mismatched `/opt` and close service/network surfaces safely.
+- Require only the filesystem behavior used by v0.1: ownership/modes, safe file types, writeability, free space, and same-filesystem atomic rename.
 
 ## Consequences
 
-Passing media tests can reject obvious defects but does not prove remaining endurance. The software must tolerate storage failure rather than relying on media quality alone.
+There is no per-poll persistent write, storage qualification authority, audit/event store, configuration export, or generalized durability transaction in v0.1.

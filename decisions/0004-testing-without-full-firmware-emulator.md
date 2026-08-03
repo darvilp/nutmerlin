@@ -2,26 +2,21 @@
 
 - Status: Accepted
 - Date: 2026-08-01
-
-## Context
-
-Only one real UPS is available. There is a primary RT-AX86U Pro and an optional ASUS RT-AC3100 currently running stock Asuswrt. Full Merlin firmware emulation under QEMU is difficult because of model-specific hardware, NVRAM, initialization, USB, networking, and closed binaries.
+- Updated: 2026-08-02 by ADR 0098
 
 ## Decision
 
-Use layered testing:
+Use separate evidence layers:
 
-1. host tests with Merlin command/filesystem shims
-2. NUT integration tests with `dummy-ups`
-3. required current AArch64/Entware package and ABI release evidence under ADR 0064
-4. optional RT-AC3100 as the legacy Merlin 386/ARMv7 lifecycle rig
-5. primary router and real UPS for manually gated integration
+1. POSIX/static checks.
+2. Host unit and golden tests through public seams.
+3. Real host `dummy-ups -> upsd -> upsc` integration.
+4. Simulated Merlin lifecycle through isolated platform shims.
+5. Manually gated exact RT-AX86U Pro evidence.
+6. Separately gated CP1500PFCLCD evidence.
 
-ARMv7 user-mode execution and full firmware rehosting remain optional research or legacy evidence.
+A full firmware emulator, ARMv7 execution, and the RT-AC3100 are optional later research. Ordinary pull requests require only layers 1–4.
 
 ## Consequences
 
-- Most tests run quickly without hardware.
-- When used, the spare router provides more relevant addon coverage than an incomplete firmware boot.
-- Real UPS battery cycling is minimized.
-- Platform adapter boundaries become a mandatory design constraint.
+Normal development is repeatable and hardware-free. No evidence layer may claim behavior belonging to another layer.

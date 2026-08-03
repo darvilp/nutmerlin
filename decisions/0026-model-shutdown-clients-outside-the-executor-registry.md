@@ -1,6 +1,6 @@
 # ADR 0026: Model shutdown clients outside the executor registry
 
-- Status: Accepted
+- Status: Deferred research - non-authoritative for v0.1
 - Date: 2026-08-02
 
 ## Context

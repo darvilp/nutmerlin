@@ -1,5 +1,7 @@
 # Graceful-only Redfish target profile qualification
 
+> Historical research only. This document is non-authoritative for v0.1; Redfish execution is deferred.
+
 Date: 2026-08-02
 
 ## Question and safety boundary
