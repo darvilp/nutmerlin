@@ -75,7 +75,7 @@ Only ADRs listed as active in `decisions/README.md` are binding for v0.1. Histor
 - Start each ticket from a recorded clean commit and preserve unrelated changes and WIP branches.
 - Establish failing behavior at the public CLI, generated configuration, real NUT process chain, or isolated Merlin adapter seam before implementation when practical.
 - Make the smallest coherent change that proves the ticket's observable acceptance criteria.
-- Run focused checks, the applicable full host gates, and separate Standards and Specification reviews.
+- Run focused checks and the applicable full host gates. At the final ticket gate, use the `code-review` skill once to run the separate Standards and Specification reviews in parallel. Repeat only a targeted review when the first pass reports a substantive actionable finding; do not add review cycles after both axes are clean.
 - Use one focused commit per completed ticket, push normally, add evidence, and close only after push and acceptance evidence.
 - Do not merge, force-push, publish a release, delete WIP branches, or close umbrella issue #2.
 - Escalate only a genuine new architecture, public interface, persistence/configuration, deployment, safety, or runtime-dependency decision.
