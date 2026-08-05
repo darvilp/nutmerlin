@@ -52,12 +52,16 @@ lifecycle_recovery_reset() {
 
 lifecycle_service_is_healthy() {
 	entware_check || return 1
+	service_resolve_current || return 1
+	service_load_active_profile || return 1
+	service_validate_active_source || return 1
 	server_record=$NUTMERLIN_TMP_ROOT/nutmerlin/run/upsd.pid
-	driver_record=$NUTMERLIN_TMP_ROOT/nutmerlin/run/dummy-ups.pid
-	service_pid_pair_is_owned_current "$server_record" "$driver_record" || return 1
+	driver_record=$NUTMERLIN_TMP_ROOT/nutmerlin/run/$SERVICE_DRIVER_RECORD_NAME
+	service_pid_pair_is_owned_current "$server_record" "$driver_record" \
+		"$SERVICE_DRIVER_ROLE" || return 1
 	service_runtime_root=$NUTMERLIN_TMP_ROOT/nutmerlin
 	export service_runtime_root
-	service_query_dummy || return 1
+	service_query_active || return 1
 	service_listener_is_loopback_only
 }
 

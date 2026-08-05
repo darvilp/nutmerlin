@@ -26,6 +26,18 @@ status_process_value() {
 	fi
 }
 
+status_driver_without_profile() {
+	status_dummy_state=$(status_process_value \
+		"$NUTMERLIN_TMP_ROOT/nutmerlin/run/dummy-ups.pid" dummy)
+	status_usbhid_state=$(status_process_value \
+		"$NUTMERLIN_TMP_ROOT/nutmerlin/run/usbhid-ups.pid" usbhid)
+	case $status_dummy_state:$status_usbhid_state in
+		running:stopped | stopped:running) printf '%s\n' running ;;
+		stopped:stopped) printf '%s\n' stopped ;;
+		*) printf '%s\n' ambiguous ;;
+	esac
+}
+
 status_collect() {
 	STATUS_INSTALLATION=ambiguous
 	STATUS_ENABLED=unknown
@@ -59,9 +71,34 @@ status_collect() {
 	fi
 	STATUS_STORAGE=$(platform_storage_state)
 	status_server_record=$NUTMERLIN_TMP_ROOT/nutmerlin/run/upsd.pid
-	status_driver_record=$NUTMERLIN_TMP_ROOT/nutmerlin/run/dummy-ups.pid
-	STATUS_DRIVER=$(status_process_value "$status_driver_record" dummy)
 	STATUS_UPSD=$(status_process_value "$status_server_record" upsd)
+	status_profile_ready=0
+	status_source_result=0
+	status_source_message=
+	if [ "$STATUS_STORAGE" = available ] && service_resolve_current >/dev/null 2>&1 &&
+		service_load_active_profile >/dev/null 2>&1; then
+		status_profile_ready=1
+		STATUS_SOURCE=$SERVICE_SOURCE
+		status_driver_record=$NUTMERLIN_TMP_ROOT/nutmerlin/run/$SERVICE_DRIVER_RECORD_NAME
+		case $SERVICE_DRIVER_ROLE in
+			dummy) status_other_driver_record=$NUTMERLIN_TMP_ROOT/nutmerlin/run/usbhid-ups.pid ;;
+			usbhid) status_other_driver_record=$NUTMERLIN_TMP_ROOT/nutmerlin/run/dummy-ups.pid ;;
+		esac
+		if [ -e "$status_other_driver_record" ] || [ -L "$status_other_driver_record" ]; then
+			STATUS_DRIVER=ambiguous
+		else
+			STATUS_DRIVER=$(status_process_value "$status_driver_record" "$SERVICE_DRIVER_ROLE")
+		fi
+	else
+		STATUS_DRIVER=$(status_driver_without_profile)
+	fi
+	if [ "$status_profile_ready" -eq 1 ] && [ "$SERVICE_SOURCE" = ups ]; then
+		if status_source_message=$(service_validate_active_source 2>&1); then
+			status_source_result=0
+		else
+			status_source_result=$?
+		fi
+	fi
 	if service_listener_is_loopback_only; then
 		STATUS_LISTENER=loopback
 	elif service_listener_is_clear; then
@@ -77,15 +114,15 @@ status_collect() {
 		STATUS_EXIT_CLASS=unavailable
 		STATUS_MESSAGE="storage is unavailable: $STATUS_STORAGE"
 	else
-		status_config_root=$NUTMERLIN_OPT_ROOT/etc/nutmerlin/config
-		status_set_id=$(cat "$status_config_root/current")
-		status_set_root=$status_config_root/sets/$status_set_id
-		STATUS_SOURCE=$(sed -n 's/^source\t//p' "$status_set_root/model.tsv")
-		STATUS_CLIENT_COUNT=$(platform_client_count "$status_set_root" 2>/dev/null || printf '%s\n' 0)
+		if [ "$status_profile_ready" -eq 1 ]; then
+			status_set_root=$NUTMERLIN_ACTIVE_CONFIG
+			STATUS_CLIENT_COUNT=$(platform_client_count "$status_set_root" 2>/dev/null || printf '%s\n' 0)
+		fi
 		service_runtime_root=$NUTMERLIN_TMP_ROOT/nutmerlin
 		export service_runtime_root
-		if [ "$STATUS_DRIVER" = running ] && [ "$STATUS_UPSD" = running ] &&
-			entware_check >/dev/null 2>&1 && service_query_dummy; then
+		if [ "$status_profile_ready" -eq 1 ] && [ "$STATUS_DRIVER" = running ] &&
+			[ "$STATUS_UPSD" = running ] && entware_check >/dev/null 2>&1 &&
+			[ "$status_source_result" -eq 0 ] && service_query_active; then
 			STATUS_UPSC=healthy
 		else
 			STATUS_UPSC=unavailable
@@ -98,7 +135,20 @@ status_collect() {
 			STATUS_EXIT=0
 			STATUS_STATE=ok
 			STATUS_EXIT_CLASS=success
-			STATUS_MESSAGE='dummy service is healthy on loopback'
+			STATUS_MESSAGE="$SERVICE_UPS_NAME service is healthy on loopback"
+		elif [ "$status_source_result" -ne 0 ]; then
+			STATUS_FAILED_LAYER=source
+			STATUS_REMEDIATION='reconnect the configured UPS or correct its stable identity'
+			STATUS_MESSAGE=${status_source_message:-source unavailable: stable USB identity could not be verified}
+			if [ "$status_source_result" -eq 78 ]; then
+				STATUS_EXIT=78
+				STATUS_STATE=refused
+				STATUS_EXIT_CLASS=configuration_refusal
+			else
+				STATUS_EXIT=69
+				STATUS_STATE=unavailable
+				STATUS_EXIT_CLASS=unavailable
+			fi
 		else
 			STATUS_FAILED_LAYER=service
 			STATUS_REMEDIATION='run service start or wait for lifecycle reconciliation'

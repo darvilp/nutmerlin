@@ -32,6 +32,119 @@ platform_process_has_environment() {
 		grep -Fx "$platform_environment_value" >/dev/null
 }
 
+platform_usb_snapshot() {
+	if [ "${NUTMERLIN_ENABLE_TEST_ADAPTERS:-0}" = 1 ]; then
+		platform_usb_fixture=$NUTMERLIN_TEST_ROOT/platform/usb-devices.tsv
+		if [ -e "$platform_usb_fixture" ] || [ -L "$platform_usb_fixture" ]; then
+			[ -f "$platform_usb_fixture" ] && [ ! -L "$platform_usb_fixture" ] || return 78
+			[ "$(stat -c '%a' "$platform_usb_fixture")" = 600 ] || return 78
+			[ "$(stat -c '%h' "$platform_usb_fixture")" = 1 ] || return 78
+			[ "$(stat -c '%u' "$platform_usb_fixture")" = "$(id -u)" ] || return 78
+			cat "$platform_usb_fixture"
+			return 0
+		fi
+		platform_usb_root=${NUTMERLIN_TEST_USB_SYSFS_ROOT:-}
+		[ -n "$platform_usb_root" ] || return 0
+		platform_usb_canonical_root=$(readlink -f "$platform_usb_root" 2>/dev/null || :)
+		case $platform_usb_canonical_root in
+			"$NUTMERLIN_TEST_ROOT"/platform/*) ;;
+			*) return 78 ;;
+		esac
+	else
+		platform_usb_root=/sys/bus/usb/devices
+		platform_usb_canonical_root=$(readlink -f "$platform_usb_root" 2>/dev/null || :)
+		[ "$platform_usb_canonical_root" = /sys/bus/usb/devices ] || return 69
+	fi
+	[ -d "$platform_usb_canonical_root" ] && [ ! -L "$platform_usb_canonical_root" ] || return 69
+	for platform_usb_visible_path in "$platform_usb_canonical_root"/*; do
+		[ -e "$platform_usb_visible_path" ] || [ -L "$platform_usb_visible_path" ] || continue
+		platform_usb_device_root=$(readlink -f "$platform_usb_visible_path" 2>/dev/null || :)
+		if [ "${NUTMERLIN_ENABLE_TEST_ADAPTERS:-0}" = 1 ]; then
+			case $platform_usb_device_root in
+				"$platform_usb_canonical_root"/*) ;;
+				*) return 78 ;;
+			esac
+		else
+			case $platform_usb_device_root in
+				/sys/devices/*) ;;
+				*) return 78 ;;
+			esac
+		fi
+		[ -d "$platform_usb_device_root" ] || continue
+		platform_usb_vendor_path=$platform_usb_device_root/idVendor
+		platform_usb_product_path=$platform_usb_device_root/idProduct
+		if [ ! -f "$platform_usb_vendor_path" ] || [ -L "$platform_usb_vendor_path" ]; then
+			continue
+		fi
+		if [ ! -f "$platform_usb_product_path" ] || [ -L "$platform_usb_product_path" ]; then
+			continue
+		fi
+		platform_usb_vendor=$(cat "$platform_usb_vendor_path")
+		platform_usb_product=$(cat "$platform_usb_product_path")
+		case $platform_usb_vendor:$platform_usb_product in
+			????:????) ;;
+			*) return 78 ;;
+		esac
+		case $platform_usb_vendor$platform_usb_product in
+			*[!0-9A-Fa-f]*) return 78 ;;
+		esac
+		platform_usb_vendor=$(printf '%s\n' "$platform_usb_vendor" | tr 'A-F' 'a-f')
+		platform_usb_product=$(printf '%s\n' "$platform_usb_product" | tr 'A-F' 'a-f')
+		platform_usb_serial=-
+		if [ -f "$platform_usb_device_root/serial" ] && [ ! -L "$platform_usb_device_root/serial" ]; then
+			platform_usb_serial=$(cat "$platform_usb_device_root/serial")
+			[ -n "$platform_usb_serial" ] && [ "${#platform_usb_serial}" -le 64 ] || return 78
+			case $platform_usb_serial in
+				*[!A-Za-z0-9._:+-]*) return 78 ;;
+			esac
+		fi
+		platform_usb_busport=-
+		if [ -f "$platform_usb_device_root/devpath" ] && [ ! -L "$platform_usb_device_root/devpath" ]; then
+			platform_usb_devpath=$(cat "$platform_usb_device_root/devpath")
+			case $platform_usb_devpath in
+				*[!0-9.]* | '') return 78 ;;
+			esac
+			platform_usb_port_number=${platform_usb_devpath##*.}
+			platform_usb_busport=$(awk -v value="$platform_usb_port_number" 'BEGIN {
+				number = value + 0
+				if (number < 1 || number > 255) exit 1
+				printf "%03d", number
+			}' 2>/dev/null || printf '%s' -)
+		fi
+		platform_usb_bus=-
+		platform_usb_device=-
+		if [ -f "$platform_usb_device_root/busnum" ] && [ ! -L "$platform_usb_device_root/busnum" ]; then
+			platform_usb_bus_value=$(cat "$platform_usb_device_root/busnum")
+			case $platform_usb_bus_value in
+				*[!0-9]* | '') return 78 ;;
+			esac
+			platform_usb_bus=$(awk -v value="$platform_usb_bus_value" 'BEGIN {
+				number = value + 0
+				if (number < 0 || number > 999) exit 1
+				printf "%03d", number
+			}' 2>/dev/null || printf '%s' -)
+		fi
+		if [ -f "$platform_usb_device_root/devnum" ] && [ ! -L "$platform_usb_device_root/devnum" ]; then
+			platform_usb_device_value=$(cat "$platform_usb_device_root/devnum")
+			case $platform_usb_device_value in
+				*[!0-9]* | '') return 78 ;;
+			esac
+			platform_usb_device=$(awk -v value="$platform_usb_device_value" 'BEGIN {
+				number = value + 0
+				if (number < 0 || number > 999) exit 1
+				printf "%03d", number
+			}' 2>/dev/null || printf '%s' -)
+		fi
+		platform_usb_device_id=${platform_usb_visible_path##*/}
+		case $platform_usb_device_id in
+			'' | *[!A-Za-z0-9._:-]*) return 78 ;;
+		esac
+		printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$platform_usb_device_id" \
+			"$platform_usb_vendor" "$platform_usb_product" "$platform_usb_serial" \
+			"$platform_usb_busport" "$platform_usb_bus" "$platform_usb_device"
+	done
+}
+
 platform_storage_state() {
 	case ${NUTMERLIN_TEST_STORAGE_STATE:-} in
 		missing | read_only | replaced | ownership_mismatch | unknown)

@@ -202,7 +202,23 @@ ownership_check_live_foreign_state() {
 		fi
 		owned_runtime_root=$NUTMERLIN_TMP_ROOT/nutmerlin
 		owned_server_record=$owned_runtime_root/run/upsd.pid
-		owned_driver_record=$owned_runtime_root/run/dummy-ups.pid
+		owned_dummy_record=$owned_runtime_root/run/dummy-ups.pid
+		owned_usbhid_record=$owned_runtime_root/run/usbhid-ups.pid
+		owned_driver_count=0
+		if [ -e "$owned_dummy_record" ] || [ -L "$owned_dummy_record" ]; then
+			owned_driver_record=$owned_dummy_record
+			owned_driver_role=dummy
+			owned_driver_count=$((owned_driver_count + 1))
+		fi
+		if [ -e "$owned_usbhid_record" ] || [ -L "$owned_usbhid_record" ]; then
+			owned_driver_record=$owned_usbhid_record
+			owned_driver_role=usbhid
+			owned_driver_count=$((owned_driver_count + 1))
+		fi
+		[ "$owned_driver_count" -eq 1 ] || {
+			ownership_refuse 'active NUT driver process identity is ambiguous'
+			return $?
+		}
 		service_pid_is_owned "$owned_server_record" upsd || {
 			ownership_refuse 'active upsd process identity is ambiguous'
 			return $?
@@ -211,8 +227,8 @@ ownership_check_live_foreign_state() {
 		# service_pid_record_read exports the parsed record fields.
 		# shellcheck disable=SC2154
 		owned_server_pid=$recorded_pid
-		service_pid_is_owned "$owned_driver_record" dummy || {
-			ownership_refuse 'active dummy-ups process identity is ambiguous'
+		service_pid_is_owned "$owned_driver_record" "$owned_driver_role" || {
+			ownership_refuse 'active NUT driver process identity is ambiguous'
 			return $?
 		}
 		service_pid_record_read "$owned_driver_record" || return 78
@@ -241,7 +257,8 @@ ownership_check_live_foreign_state() {
 	fi
 	if [ "${NUTMERLIN_OWNERSHIP_STATE:-absent}" = owned ]; then
 		for stale_record in "$NUTMERLIN_TMP_ROOT/nutmerlin/run/upsd.pid" \
-			"$NUTMERLIN_TMP_ROOT/nutmerlin/run/dummy-ups.pid"; do
+			"$NUTMERLIN_TMP_ROOT/nutmerlin/run/dummy-ups.pid" \
+			"$NUTMERLIN_TMP_ROOT/nutmerlin/run/usbhid-ups.pid"; do
 			if [ -e "$stale_record" ] || [ -L "$stale_record" ]; then
 				ownership_refuse 'stale or unsafe owned process state is present'
 				return $?

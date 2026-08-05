@@ -27,6 +27,44 @@ service_resolve_current() {
 	export NUTMERLIN_ACTIVE_CONFIG
 }
 
+service_load_active_profile() {
+	active_profile_set_id=${NUTMERLIN_ACTIVE_CONFIG##*/}
+	configuration_read_model "$NUTMERLIN_ACTIVE_CONFIG" "$active_profile_set_id" || return 78
+	SERVICE_SOURCE=$CONFIGURATION_SOURCE
+	case $SERVICE_SOURCE in
+		dummy)
+			SERVICE_DRIVER_ROLE=dummy
+			SERVICE_DRIVER_RECORD_NAME=dummy-ups.pid
+			SERVICE_DRIVER_SOCKET_NAME=dummy-ups-dummy
+			SERVICE_UPS_NAME=dummy
+			;;
+		ups)
+			SERVICE_DRIVER_ROLE=usbhid
+			SERVICE_DRIVER_RECORD_NAME=usbhid-ups.pid
+			SERVICE_DRIVER_SOCKET_NAME=usbhid-ups-ups
+			SERVICE_UPS_NAME=ups
+			;;
+		*) return 78 ;;
+	esac
+	export SERVICE_SOURCE SERVICE_DRIVER_ROLE SERVICE_DRIVER_RECORD_NAME
+	export SERVICE_DRIVER_SOCKET_NAME SERVICE_UPS_NAME
+}
+
+service_load_active_driver_binary() {
+	case $SERVICE_DRIVER_ROLE in
+		dummy) SERVICE_DRIVER_BINARY=$NUTMERLIN_DUMMY_UPS_BIN ;;
+		usbhid) SERVICE_DRIVER_BINARY=$NUTMERLIN_USBHID_UPS_BIN ;;
+		*) return 78 ;;
+	esac
+	export SERVICE_DRIVER_BINARY
+}
+
+service_validate_active_source() {
+	[ "$SERVICE_SOURCE" != ups ] || configuration_resolve_usb_identity \
+		"$CONFIGURATION_VENDOR_ID" "$CONFIGURATION_PRODUCT_ID" \
+		"$CONFIGURATION_IDENTITY_KIND" "$CONFIGURATION_IDENTITY_VALUE"
+}
+
 service_run_user() {
 	if [ "${NUTMERLIN_ENABLE_TEST_ADAPTERS:-0}" = 1 ]; then
 		service_user=${NUTMERLIN_TEST_RUN_USER:-}
@@ -103,8 +141,11 @@ service_run_locked() {
 	service_lock_acquire || return $?
 	trap 'service_lock_release' EXIT
 	trap 'service_lock_release; exit 130' HUP INT TERM
-	"$@"
-	locked_status=$?
+	if "$@"; then
+		locked_status=0
+	else
+		locked_status=$?
+	fi
 	service_lock_release
 	trap - EXIT HUP INT TERM
 	return "$locked_status"
@@ -136,6 +177,8 @@ service_binary_is_allowed() {
 	case $allowed_role:$allowed_binary in
 		dummy:"$NUTMERLIN_OPT_ROOT"/lib/nut/dummy-ups | \
 			dummy:"$NUTMERLIN_OPT_ROOT"/usr/lib/nut/dummy-ups | \
+			usbhid:"$NUTMERLIN_OPT_ROOT"/lib/nut/usbhid-ups | \
+			usbhid:"$NUTMERLIN_OPT_ROOT"/usr/lib/nut/usbhid-ups | \
 			upsd:"$NUTMERLIN_OPT_ROOT"/lib/nut/upsd | \
 			upsd:"$NUTMERLIN_OPT_ROOT"/sbin/upsd) return 0 ;;
 		*) return 1 ;;
@@ -176,11 +219,12 @@ service_current_set_id() {
 service_pid_pair_is_owned_current() {
 	pair_server_record=$1
 	pair_driver_record=$2
+	pair_driver_role=${3:-dummy}
 	service_pid_is_owned "$pair_server_record" upsd || return 1
 	service_pid_record_read "$pair_server_record" || return 1
 	pair_server_set_id=$recorded_set_id
 	pair_server_epoch=$recorded_epoch
-	service_pid_is_owned "$pair_driver_record" dummy || return 1
+	service_pid_is_owned "$pair_driver_record" "$pair_driver_role" || return 1
 	service_pid_record_read "$pair_driver_record" || return 1
 	pair_driver_set_id=$recorded_set_id
 	pair_driver_epoch=$recorded_epoch
@@ -270,6 +314,44 @@ service_query_dummy() {
 	return 1
 }
 
+service_query_usbhid() {
+	query_attempt=0
+	while [ "$query_attempt" -lt 10 ]; do
+		if "$NUTMERLIN_UPSC_BIN" ups@127.0.0.1 >"$service_runtime_root/run/upsc.out" \
+			2>"$service_runtime_root/run/upsc.err"; then
+			query_identity_matches=1
+			case $CONFIGURATION_IDENTITY_KIND in
+				serial)
+					grep -Fx "device.serial: $CONFIGURATION_IDENTITY_VALUE" \
+						"$service_runtime_root/run/upsc.out" >/dev/null || query_identity_matches=0
+					;;
+				busport)
+					grep -Fx "driver.parameter.busport: ^$CONFIGURATION_IDENTITY_VALUE\$" \
+						"$service_runtime_root/run/upsc.out" >/dev/null || query_identity_matches=0
+					;;
+				*) query_identity_matches=0 ;;
+			esac
+			if [ "$query_identity_matches" -eq 1 ] &&
+				grep -Fx 'driver.name: usbhid-ups' "$service_runtime_root/run/upsc.out" >/dev/null &&
+				grep -Eq '^ups[.]status: [A-Z]+([+ ][A-Z]+)*$' \
+					"$service_runtime_root/run/upsc.out"; then
+				return 0
+			fi
+		fi
+		query_attempt=$((query_attempt + 1))
+		sleep 1
+	done
+	return 1
+}
+
+service_query_active() {
+	case $SERVICE_SOURCE in
+		dummy) service_query_dummy ;;
+		ups) service_query_usbhid ;;
+		*) return 1 ;;
+	esac
+}
+
 service_stop() {
 	service_runtime_root=$NUTMERLIN_TMP_ROOT/nutmerlin
 	service_stop_pid_file "$service_runtime_root/run/upsd.pid" upsd || {
@@ -278,6 +360,10 @@ service_stop() {
 	}
 	service_stop_pid_file "$service_runtime_root/run/dummy-ups.pid" dummy || {
 		printf '%s\n' 'service refused: dummy-ups process identity is not owned' >&2
+		return 78
+	}
+	service_stop_pid_file "$service_runtime_root/run/usbhid-ups.pid" usbhid || {
+		printf '%s\n' 'service refused: usbhid-ups process identity is not owned' >&2
 		return 78
 	}
 	service_listener_is_clear || {
@@ -297,12 +383,19 @@ service_cleanup_failed_start() {
 		platform_process_signal "$started_driver_pid" 2>/dev/null || :
 		wait "$started_driver_pid" 2>/dev/null || :
 	fi
-	rm -f -- "$service_runtime_root/run/upsd.pid" "$service_runtime_root/run/dummy-ups.pid"
+	rm -f -- "$service_runtime_root/run/upsd.pid" "$service_runtime_root/run/dummy-ups.pid" \
+		"$service_runtime_root/run/usbhid-ups.pid"
 }
 
 service_start() {
 	entware_check
 	service_resolve_current
+	service_load_active_profile || {
+		printf '%s\n' 'service refused: active source profile is invalid' >&2
+		return 78
+	}
+	service_load_active_driver_binary || return $?
+	service_validate_active_source || return $?
 	service_user=$(service_run_user) || {
 		printf '%s\n' 'service unavailable: unprivileged NUT user is unavailable' >&2
 		return 69
@@ -310,7 +403,9 @@ service_start() {
 	service_runtime_root=$NUTMERLIN_TMP_ROOT/nutmerlin
 	service_prepare_runtime || return $?
 	chown "$service_user" "$service_runtime_root/state"
-	for service_log_path in "$service_runtime_root/log/dummy-ups.log" "$service_runtime_root/log/upsd.log"; do
+	service_driver_log=$service_runtime_root/log/$SERVICE_DRIVER_ROLE.log
+	[ "$SERVICE_DRIVER_ROLE" != dummy ] || service_driver_log=$service_runtime_root/log/dummy-ups.log
+	for service_log_path in "$service_driver_log" "$service_runtime_root/log/upsd.log"; do
 		if [ -e "$service_log_path" ] || [ -L "$service_log_path" ]; then
 			if [ ! -f "$service_log_path" ] || [ -L "$service_log_path" ] ||
 				[ "$(stat -c '%h' "$service_log_path")" != 1 ]; then
@@ -321,7 +416,16 @@ service_start() {
 	done
 
 	server_pid_path=$service_runtime_root/run/upsd.pid
-	driver_pid_path=$service_runtime_root/run/dummy-ups.pid
+	driver_pid_path=$service_runtime_root/run/$SERVICE_DRIVER_RECORD_NAME
+	case $SERVICE_DRIVER_ROLE in
+		dummy) other_driver_pid_path=$service_runtime_root/run/usbhid-ups.pid ;;
+		usbhid) other_driver_pid_path=$service_runtime_root/run/dummy-ups.pid ;;
+		*) return 78 ;;
+	esac
+	if [ -e "$other_driver_pid_path" ] || [ -L "$other_driver_pid_path" ]; then
+		printf '%s\n' 'service refused: partial or unsafe process state' >&2
+		return 78
+	fi
 	server_pid_present=0
 	driver_pid_present=0
 	{ [ ! -e "$server_pid_path" ] && [ ! -L "$server_pid_path" ]; } || server_pid_present=1
@@ -331,10 +435,9 @@ service_start() {
 		return 78
 	fi
 	if [ "$server_pid_present" -eq 1 ]; then
-		if service_pid_pair_is_owned_current "$service_runtime_root/run/upsd.pid" \
-			"$service_runtime_root/run/dummy-ups.pid" &&
-			service_query_dummy && service_listener_is_loopback_only; then
-			SERVICE_MESSAGE='dummy is already running on loopback'
+		if service_pid_pair_is_owned_current "$server_pid_path" "$driver_pid_path" \
+			"$SERVICE_DRIVER_ROLE" && service_query_active && service_listener_is_loopback_only; then
+			SERVICE_MESSAGE="$SERVICE_UPS_NAME is already running on loopback"
 			export SERVICE_MESSAGE
 			return 0
 		fi
@@ -356,27 +459,29 @@ service_start() {
 	service_uid=$(id -u "$service_user")
 	NUTMERLIN_SERVICE_EPOCH=$service_epoch
 	export NUT_CONFPATH NUT_STATEPATH NUTMERLIN_SERVICE_EPOCH
-	"$NUTMERLIN_DUMMY_UPS_BIN" -a dummy -F -u "$service_user" \
-		>"$service_runtime_root/log/dummy-ups.log" 2>&1 &
+	"$SERVICE_DRIVER_BINARY" -a "$SERVICE_UPS_NAME" -F -u "$service_user" \
+		>"$service_driver_log" 2>&1 &
 	started_driver_pid=$!
-	if ! service_write_pid_record "$service_runtime_root/run/dummy-ups.pid" "$started_driver_pid" \
+	if ! service_write_pid_record "$driver_pid_path" "$started_driver_pid" \
 		"$service_uid" "$service_installation_id" "$service_set_id" "$service_epoch" \
-		"$NUTMERLIN_DUMMY_UPS_BIN"; then
+		"$SERVICE_DRIVER_BINARY"; then
 		service_cleanup_failed_start
-		printf '%s\n' 'service refused: dummy-ups PID record could not be created safely' >&2
+		printf 'service refused: %s PID record could not be created safely\n' \
+			"$SERVICE_DRIVER_ROLE" >&2
 		return 78
 	fi
 
 	driver_attempt=0
-	while [ ! -e "$service_runtime_root/state/dummy-ups-dummy" ] &&
+	while [ ! -e "$service_runtime_root/state/$SERVICE_DRIVER_SOCKET_NAME" ] &&
 		[ "$driver_attempt" -lt 10 ]; do
+		platform_process_is_alive "$started_driver_pid" || break
 		driver_attempt=$((driver_attempt + 1))
 		sleep 1
 	done
-	if [ ! -e "$service_runtime_root/state/dummy-ups-dummy" ] ||
+	if [ ! -e "$service_runtime_root/state/$SERVICE_DRIVER_SOCKET_NAME" ] ||
 		! platform_process_is_alive "$started_driver_pid"; then
 		service_cleanup_failed_start
-		printf '%s\n' 'service temporary failure: dummy-ups did not start' >&2
+		printf 'service temporary failure: %s did not start\n' "$SERVICE_DRIVER_ROLE" >&2
 		return 75
 	fi
 
@@ -395,7 +500,7 @@ service_start() {
 		service_injected_failure=1
 	fi
 	service_health_failure=
-	if ! service_query_dummy; then
+	if ! service_query_active; then
 		service_health_failure=query
 	elif ! service_listener_is_loopback_only; then
 		service_health_failure=listener
@@ -404,11 +509,12 @@ service_start() {
 	fi
 	if [ -n "$service_health_failure" ]; then
 		service_cleanup_failed_start
-		printf 'service temporary failure: owned dummy health check failed: %s\n' "$service_health_failure" >&2
+		printf 'service temporary failure: owned %s health check failed: %s\n' \
+			"$SERVICE_UPS_NAME" "$service_health_failure" >&2
 		return 75
 	fi
 
-	SERVICE_MESSAGE='dummy is running on loopback'
+	SERVICE_MESSAGE="$SERVICE_UPS_NAME is running on loopback"
 	export SERVICE_MESSAGE
 }
 

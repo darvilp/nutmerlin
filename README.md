@@ -30,7 +30,7 @@ v0.1 has no router-side outage policy, remote shutdown executor, action journal,
 
 ## Current status
 
-The owned dummy core and Merlin lifecycle slice are implemented: isolated install, real `dummy-ups`/`upsd`/`upsc`, five managed hooks, bounded recovery, and local status/diagnostics are covered by host integration tests. Trusted-LAN exposure, a real USB source, client credentials, conservative removal, and exact hardware evidence remain on the v0.1 track in `plan.md`. This repository is development software and not a published release.
+The owned dummy core, Merlin lifecycle slice, and closed uniquely identified USB-source profile are implemented. Isolated install, real `dummy-ups`/`upsd`/`upsc`, five managed hooks, bounded recovery, local status/diagnostics, and host USB identity fixtures are covered by tests. Trusted-LAN exposure, client credentials, conservative removal, and exact router/UPS evidence remain on the v0.1 track in `plan.md`. No physical-UPS claim has yet been made. This repository is development software and not a published release.
 
 ## Development
 

@@ -144,9 +144,14 @@ case $command_name in
 		result_emit service human ok success "$LIFECYCLE_MESSAGE"
 		;;
 	source)
-		if [ "$#" -ne 1 ] || [ "$1" != use-dummy ]; then
-			usage
-		fi
+		[ "$#" -ge 1 ] || usage
+		source_action=$1
+		shift
+		case $source_action in
+			show | use-dummy) [ "$#" -eq 0 ] || usage ;;
+			configure-usbhid) ;;
+			*) usage ;;
+		esac
 		# shellcheck disable=SC1091
 		. "$library_dir/paths.sh"
 		# shellcheck disable=SC1091
@@ -166,7 +171,74 @@ case $command_name in
 			printf '%s\n' 'source refused: installed ownership evidence is incomplete' >&2
 			exit 78
 		}
-		service_run_locked configuration_activate_dummy
+		case $source_action in
+			show) configuration_describe_current_source ;;
+			use-dummy) service_run_locked configuration_activate_dummy ;;
+			configure-usbhid)
+				usb_vendor_id=
+				usb_product_id=
+				usb_serial=
+				usb_busport=
+				while [ "$#" -gt 0 ]; do
+					usb_option=$1
+					shift
+					[ "$#" -gt 0 ] || usage
+					usb_value=$1
+					shift
+					case $usb_option in
+						--vendor-id)
+							[ -z "$usb_vendor_id" ] || usage
+							usb_vendor_id=$usb_value
+							;;
+						--product-id)
+							[ -z "$usb_product_id" ] || usage
+							usb_product_id=$usb_value
+							;;
+						--serial)
+							[ -z "$usb_serial" ] || usage
+							usb_serial=$usb_value
+							;;
+						--busport)
+							[ -z "$usb_busport" ] || usage
+							usb_busport=$usb_value
+							;;
+						*) usage ;;
+					esac
+				done
+				if [ -z "$usb_vendor_id" ] || [ -z "$usb_product_id" ]; then
+					usage
+				fi
+				if { [ -n "$usb_serial" ] && [ -n "$usb_busport" ]; } ||
+					{ [ -z "$usb_serial" ] && [ -z "$usb_busport" ]; }; then
+					usage
+				fi
+				usb_vendor_id=$(configuration_normalize_usb_id "$usb_vendor_id") || {
+					printf '%s\n' 'source refused: vendor ID must be exactly four hexadecimal digits' >&2
+					exit 78
+				}
+				usb_product_id=$(configuration_normalize_usb_id "$usb_product_id") || {
+					printf '%s\n' 'source refused: product ID must be exactly four hexadecimal digits' >&2
+					exit 78
+				}
+				if [ -n "$usb_serial" ]; then
+					configuration_serial_is_valid "$usb_serial" || {
+						printf '%s\n' 'source refused: serial must be a 1-64 character literal identifier' >&2
+						exit 78
+					}
+					usb_identity_kind=serial
+					usb_identity_value=$usb_serial
+				else
+					usb_busport=$(configuration_normalize_busport "$usb_busport") || {
+						printf '%s\n' 'source refused: busport must be a physical port from 1 through 255' >&2
+						exit 78
+					}
+					usb_identity_kind=busport
+					usb_identity_value=$usb_busport
+				fi
+				service_run_locked configuration_activate_usbhid "$usb_vendor_id" \
+					"$usb_product_id" "$usb_identity_kind" "$usb_identity_value"
+				;;
+		esac
 		# shellcheck disable=SC1091
 		. "$library_dir/result.sh"
 		result_emit source human ok success "$SOURCE_MESSAGE"
