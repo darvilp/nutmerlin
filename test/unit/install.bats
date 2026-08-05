@@ -58,6 +58,160 @@ setup() {
 	[ ! -e "$NUTMERLIN_EXTERNAL_CALL_LOG" ]
 }
 
+@test "install appends one attributable block to every Merlin hook without changing its prefix" {
+	entware_fixture_setup
+	hook_root=$NUTMERLIN_JFFS_ROOT/scripts
+	mkdir "$hook_root"
+	for hook_name in services-start services-stop post-mount unmount firewall-start; do
+		printf 'unrelated-%s' "$hook_name" >"$hook_root/$hook_name"
+		chmod 755 "$hook_root/$hook_name"
+		cp "$hook_root/$hook_name" "$BATS_TEST_TMPDIR/$hook_name.original"
+	done
+
+	make --no-print-directory -C "$REPOSITORY_ROOT" install DESTDIR="$NUTMERLIN_TEST_ROOT" >/dev/null
+	installation_id=$(cat "$NUTMERLIN_JFFS_ROOT/addons/nutmerlin/installation.id")
+	for hook_name in services-start services-stop post-mount unmount firewall-start; do
+		hook_path=$hook_root/$hook_name
+		original_size=$(wc -c <"$BATS_TEST_TMPDIR/$hook_name.original")
+		cmp -n "$original_size" "$BATS_TEST_TMPDIR/$hook_name.original" "$hook_path"
+		[ "$(grep -c "^# BEGIN NUTMerlin managed block: $installation_id $hook_name$" "$hook_path")" -eq 1 ]
+		[ "$(grep -c "^# END NUTMerlin managed block: $installation_id $hook_name$" "$hook_path")" -eq 1 ]
+		grep -F "hook $hook_name" "$hook_path"
+	done
+
+	make --no-print-directory -C "$REPOSITORY_ROOT" install DESTDIR="$NUTMERLIN_TEST_ROOT" >/dev/null
+	for hook_name in services-start services-stop post-mount unmount firewall-start; do
+		[ "$(grep -c '^# BEGIN NUTMerlin managed block:' "$hook_root/$hook_name")" -eq 1 ]
+	done
+}
+
+@test "installed status and diagnostics expose stable redacted lifecycle dimensions" {
+	entware_fixture_setup
+	make --no-print-directory -C "$REPOSITORY_ROOT" install DESTDIR="$NUTMERLIN_TEST_ROOT" >/dev/null
+	installed_cli=$NUTMERLIN_JFFS_ROOT/addons/nutmerlin/bin/nutmerlin
+
+	run env NUTMERLIN_ENABLE_TEST_ADAPTERS=1 \
+		NUTMERLIN_TEST_ROOT="$NUTMERLIN_TEST_ROOT" \
+		NUTMERLIN_TEST_RUN_USER="$(id -un)" \
+		"$installed_cli" status --json
+	[ "$status" -eq 69 ]
+	[ "$(printf '%s\n' "$output" | jq -r '.schema_version')" = nutmerlin.result.v1 ]
+	[ "$(printf '%s\n' "$output" | jq -r '.details.installation')" = owned ]
+	[ "$(printf '%s\n' "$output" | jq -r '.details.enabled')" = enabled ]
+	[ "$(printf '%s\n' "$output" | jq -r '.details.storage')" = available ]
+	[ "$(printf '%s\n' "$output" | jq -r '.details.source')" = dummy ]
+	[ "$(printf '%s\n' "$output" | jq -r '.details.client_count')" = 0 ]
+	[ "$(printf '%s\n' "$output" | jq -r '.details.recovery')" = ready ]
+
+	run env NUTMERLIN_ENABLE_TEST_ADAPTERS=1 \
+		NUTMERLIN_TEST_ROOT="$NUTMERLIN_TEST_ROOT" \
+		NUTMERLIN_TEST_RUN_USER="$(id -un)" \
+		"$installed_cli" diagnostics --json
+	[ "$status" -eq 69 ]
+	[ "$(printf '%s\n' "$output" | jq -r '.details.failed_layer')" = service ]
+	[ "$(printf '%s\n' "$output" | jq -r '.details.remediation')" = 'run service start or wait for lifecycle reconciliation' ]
+	run rg -n 'password|secret|serial' <<<"$output"
+	[ "$status" -eq 1 ]
+}
+
+@test "owned disabled state remains attributable and reports disabled" {
+	entware_fixture_setup
+	make --no-print-directory -C "$REPOSITORY_ROOT" install DESTDIR="$NUTMERLIN_TEST_ROOT" >/dev/null
+	code_root=$NUTMERLIN_JFFS_ROOT/addons/nutmerlin
+	installed_cli=$code_root/bin/nutmerlin
+	printf '%s\n' 0 >"$code_root/enabled"
+
+	run env NUTMERLIN_ENABLE_TEST_ADAPTERS=1 \
+		NUTMERLIN_TEST_ROOT="$NUTMERLIN_TEST_ROOT" \
+		NUTMERLIN_TEST_RUN_USER="$(id -un)" \
+		"$installed_cli" status --json
+
+	[ "$status" -eq 69 ]
+	[ "$(printf '%s\n' "$output" | jq -r '.details.installation')" = owned ]
+	[ "$(printf '%s\n' "$output" | jq -r '.details.enabled')" = disabled ]
+}
+
+@test "failed hook installation restores every original hook byte for byte" {
+	entware_fixture_setup
+	hook_root=$NUTMERLIN_JFFS_ROOT/scripts
+	mkdir "$hook_root"
+	for hook_name in services-start services-stop post-mount unmount firewall-start; do
+		printf 'original-%s-without-newline' "$hook_name" >"$hook_root/$hook_name"
+		chmod 755 "$hook_root/$hook_name"
+		cp -p "$hook_root/$hook_name" "$BATS_TEST_TMPDIR/$hook_name.original"
+	done
+
+	run env NUTMERLIN_TEST_HOOK_INSTALL_FAIL_AFTER=services-stop \
+		make --no-print-directory -C "$REPOSITORY_ROOT" install DESTDIR="$NUTMERLIN_TEST_ROOT"
+
+	[ "$status" -eq 2 ]
+	for hook_name in services-start services-stop post-mount unmount firewall-start; do
+		cmp "$BATS_TEST_TMPDIR/$hook_name.original" "$hook_root/$hook_name"
+		[ "$(stat -c '%a' "$hook_root/$hook_name")" = 755 ]
+	done
+	[ ! -e "$NUTMERLIN_JFFS_ROOT/addons/nutmerlin" ]
+	[ ! -e "$NUTMERLIN_OPT_ROOT/etc/nutmerlin" ]
+}
+
+@test "hook rollback retains and refuses a concurrently changed installed hook" {
+	hook_root=$NUTMERLIN_JFFS_ROOT/scripts
+	mkdir "$hook_root"
+	for hook_name in services-start services-stop post-mount unmount firewall-start; do
+		printf 'original-%s' "$hook_name" >"$hook_root/$hook_name"
+		chmod 755 "$hook_root/$hook_name"
+		cp -p "$hook_root/$hook_name" "$BATS_TEST_TMPDIR/$hook_name.original"
+	done
+
+	run env NUTMERLIN_ENABLE_TEST_ADAPTERS=1 \
+		NUTMERLIN_TEST_ROOT="$NUTMERLIN_TEST_ROOT" \
+		REPOSITORY_ROOT="$REPOSITORY_ROOT" \
+		/bin/sh -c '
+			. "$REPOSITORY_ROOT/lib/nutmerlin/paths.sh"
+			. "$REPOSITORY_ROOT/lib/nutmerlin/hooks.sh"
+			paths_initialize
+			hooks_install_all 0123456789abcdef0123456789abcdef "$REPOSITORY_ROOT"
+			printf "\nconcurrent-foreign-change\n" >>"$NUTMERLIN_JFFS_ROOT/scripts/services-stop"
+			hooks_rollback_install
+		'
+
+	[ "$status" -eq 78 ]
+	grep -Fx 'concurrent-foreign-change' "$hook_root/services-stop"
+	for hook_name in services-start post-mount unmount firewall-start; do
+		cmp "$BATS_TEST_TMPDIR/$hook_name.original" "$hook_root/$hook_name"
+	done
+}
+
+@test "hook install never adopts a change made immediately after publication" {
+	hook_root=$NUTMERLIN_JFFS_ROOT/scripts
+	mkdir "$hook_root"
+	for hook_name in services-start services-stop post-mount unmount firewall-start; do
+		printf 'original-%s' "$hook_name" >"$hook_root/$hook_name"
+		chmod 755 "$hook_root/$hook_name"
+		cp -p "$hook_root/$hook_name" "$BATS_TEST_TMPDIR/$hook_name.original"
+	done
+
+	run env NUTMERLIN_ENABLE_TEST_ADAPTERS=1 \
+		NUTMERLIN_TEST_ROOT="$NUTMERLIN_TEST_ROOT" \
+		REPOSITORY_ROOT="$REPOSITORY_ROOT" \
+		/bin/sh -c '
+			. "$REPOSITORY_ROOT/lib/nutmerlin/paths.sh"
+			. "$REPOSITORY_ROOT/lib/nutmerlin/hooks.sh"
+			paths_initialize
+			hooks_test_after_publish() {
+				[ "$2" != services-stop ] || printf "\nconcurrent-after-publish\n" >>"$1"
+			}
+			hooks_install_all 0123456789abcdef0123456789abcdef "$REPOSITORY_ROOT" || install_status=$?
+			[ "${install_status:-0}" -eq 78 ] || exit 1
+			hooks_rollback_install
+		'
+
+	[ "$status" -eq 78 ]
+	grep -Fx 'concurrent-after-publish' "$hook_root/services-stop"
+	for hook_name in services-start post-mount unmount firewall-start; do
+		cmp "$BATS_TEST_TMPDIR/$hook_name.original" "$hook_root/$hook_name"
+	done
+}
+
 @test "development install refuses an unmarked destination root" {
 	entware_fixture_setup
 	rm "$NUTMERLIN_TEST_ROOT/.nutmerlin-test-root"

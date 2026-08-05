@@ -11,6 +11,10 @@ source_root=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 # shellcheck disable=SC1091
 . "$source_root/lib/nutmerlin/configuration.sh"
 # shellcheck disable=SC1091
+. "$source_root/lib/nutmerlin/hooks.sh"
+# shellcheck disable=SC1091
+. "$source_root/lib/nutmerlin/platform.sh"
+# shellcheck disable=SC1091
 . "$source_root/lib/nutmerlin/ownership.sh"
 # shellcheck disable=SC1091
 . "$source_root/lib/nutmerlin/service.sh"
@@ -43,9 +47,13 @@ config_candidate=$NUTMERLIN_OPT_ROOT/etc/.nutmerlin-install-$installation_id
 install_complete=0
 installed_code_root=0
 installed_config_root=0
+NUTMERLIN_HOOK_INSTALL_ACTIVE=0
+export NUTMERLIN_HOOK_INSTALL_ACTIVE
 
 cleanup_incomplete_install() {
 	[ "$install_complete" -eq 1 ] && return
+	hook_rollback_status=0
+	hooks_rollback_install || hook_rollback_status=$?
 	for incomplete_path in "$code_candidate" "$config_candidate"; do
 		case $incomplete_path in
 			"$NUTMERLIN_JFFS_ROOT"/addons/.nutmerlin-install-* | \
@@ -59,6 +67,9 @@ cleanup_incomplete_install() {
 	fi
 	if [ "$installed_code_root" -eq 1 ]; then
 		rm -rf -- "$code_root"
+	fi
+	if [ "$hook_rollback_status" -ne 0 ]; then
+		printf '%s\n' 'NUTMerlin install cleanup retained a concurrently changed hook' >&2
 	fi
 }
 
@@ -78,9 +89,10 @@ printf '%s\n' "$installation_id" >"$code_candidate/installation.id"
 printf '%s\n' '1' >"$code_candidate/enabled"
 printf '%s\n' "$NUTMERLIN_ENTWARE_RECORD" >"$code_candidate/entware.tsv"
 chmod 600 "$code_candidate/installation.id" "$code_candidate/enabled" "$code_candidate/entware.tsv"
+hooks_write_metadata "$code_candidate" "$installation_id" "$code_root"
 (
 	cd "$code_candidate"
-	sha256sum VERSION bin/nutmerlin entware.tsv lib/*.sh share/dummy/cyberpower.dev >owned-files
+	sha256sum VERSION bin/nutmerlin entware.tsv hooks.tsv lib/*.sh share/dummy/cyberpower.dev >owned-files
 )
 chmod 600 "$code_candidate/owned-files"
 
@@ -95,11 +107,13 @@ mv "$config_candidate" "$config_root"
 installed_config_root=1
 mkdir -m 711 "$runtime_root"
 mkdir -m 700 "$runtime_root/lock" "$runtime_root/run" "$runtime_root/state" "$runtime_root/log"
+hooks_install_all "$installation_id" "$code_root"
 ownership_verify_code_root "$code_root" || exit 70
 ownership_verify_config_root "$config_root" || exit 70
 if [ "$(cat "$code_root/installation.id")" != "$(cat "$config_root/installation.id")" ]; then
 	exit 70
 fi
+hooks_commit_install
 install_complete=1
 trap - EXIT HUP INT TERM
 

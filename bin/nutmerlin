@@ -5,8 +5,10 @@ set -eu
 program_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 if [ -d "$program_dir/../lib/nutmerlin" ]; then
 	library_dir=$program_dir/../lib/nutmerlin
+	installed_layout=0
 else
 	library_dir=$program_dir/../lib
+	installed_layout=1
 fi
 
 usage() {
@@ -39,11 +41,67 @@ case $command_name in
 				;;
 			*) usage ;;
 		esac
-		# The installed core is resolved relative to the CLI.
+		if [ "$installed_layout" -ne 1 ]; then
+			# shellcheck disable=SC1091
+			. "$library_dir/result.sh"
+			result_emit status "$output_format" unavailable unavailable 'NUTMerlin core is not installed'
+			exit 69
+		fi
+		# shellcheck disable=SC1091
+		. "$library_dir/paths.sh"
+		# shellcheck disable=SC1091
+		. "$library_dir/entware.sh"
+		# shellcheck disable=SC1091
+		. "$library_dir/configuration.sh"
+		# shellcheck disable=SC1091
+		. "$library_dir/hooks.sh"
+		# shellcheck disable=SC1091
+		. "$library_dir/platform.sh"
+		# shellcheck disable=SC1091
+		. "$library_dir/ownership.sh"
+		# shellcheck disable=SC1091
+		. "$library_dir/service.sh"
+		# shellcheck disable=SC1091
+		. "$library_dir/lifecycle.sh"
+		# shellcheck disable=SC1091
+		. "$library_dir/status.sh"
 		# shellcheck disable=SC1091
 		. "$library_dir/result.sh"
-		result_emit status "$output_format" unavailable unavailable 'NUTMerlin core is not installed'
-		exit 69
+		paths_initialize
+		status_collect
+		result_emit_status status "$output_format" "$STATUS_STATE" "$STATUS_EXIT_CLASS" "$STATUS_MESSAGE" \
+			"$STATUS_INSTALLATION" "$STATUS_ENABLED" "$STATUS_STORAGE" "$STATUS_SOURCE" \
+			"$STATUS_DRIVER" "$STATUS_UPSD" "$STATUS_UPSC" "$STATUS_LISTENER" "$STATUS_FIREWALL" \
+			"$STATUS_CLIENT_COUNT" "$STATUS_RECOVERY" "$STATUS_FAILED_LAYER" "$STATUS_REMEDIATION"
+		exit "$STATUS_EXIT"
+		;;
+	diagnostics)
+		output_format=human
+		case $# in
+			0) ;;
+			1)
+				[ "$1" = --json ] || usage
+				output_format=json
+				;;
+			*) usage ;;
+		esac
+		if [ "$installed_layout" -ne 1 ]; then
+			# shellcheck disable=SC1091
+			. "$library_dir/result.sh"
+			result_emit diagnostics "$output_format" unavailable unavailable 'NUTMerlin core is not installed'
+			exit 69
+		fi
+		for status_library in paths entware configuration hooks ownership service platform lifecycle status result; do
+			# shellcheck disable=SC1090
+			. "$library_dir/$status_library.sh"
+		done
+		paths_initialize
+		status_collect
+		result_emit_status diagnostics "$output_format" "$STATUS_STATE" "$STATUS_EXIT_CLASS" "$STATUS_MESSAGE" \
+			"$STATUS_INSTALLATION" "$STATUS_ENABLED" "$STATUS_STORAGE" "$STATUS_SOURCE" \
+			"$STATUS_DRIVER" "$STATUS_UPSD" "$STATUS_UPSC" "$STATUS_LISTENER" "$STATUS_FIREWALL" \
+			"$STATUS_CLIENT_COUNT" "$STATUS_RECOVERY" "$STATUS_FAILED_LAYER" "$STATUS_REMEDIATION"
+		exit "$STATUS_EXIT"
 		;;
 	service)
 		[ "$#" -eq 1 ] || usage
@@ -59,9 +117,15 @@ case $command_name in
 		# shellcheck disable=SC1091
 		. "$library_dir/configuration.sh"
 		# shellcheck disable=SC1091
+		. "$library_dir/hooks.sh"
+		# shellcheck disable=SC1091
+		. "$library_dir/platform.sh"
+		# shellcheck disable=SC1091
 		. "$library_dir/ownership.sh"
 		# shellcheck disable=SC1091
 		. "$library_dir/service.sh"
+		# shellcheck disable=SC1091
+		. "$library_dir/lifecycle.sh"
 		paths_initialize
 		if [ "$service_action" = stop ]; then
 			ownership_verify_code_root "$NUTMERLIN_JFFS_ROOT/addons/nutmerlin" || {
@@ -74,10 +138,10 @@ case $command_name in
 				exit 78
 			}
 		fi
-		service_run_locked "service_$service_action"
+		service_run_locked "lifecycle_user_$service_action"
 		# shellcheck disable=SC1091
 		. "$library_dir/result.sh"
-		result_emit service human ok success "$SERVICE_MESSAGE"
+		result_emit service human ok success "$LIFECYCLE_MESSAGE"
 		;;
 	source)
 		if [ "$#" -ne 1 ] || [ "$1" != use-dummy ]; then
@@ -89,6 +153,10 @@ case $command_name in
 		. "$library_dir/entware.sh"
 		# shellcheck disable=SC1091
 		. "$library_dir/configuration.sh"
+		# shellcheck disable=SC1091
+		. "$library_dir/hooks.sh"
+		# shellcheck disable=SC1091
+		. "$library_dir/platform.sh"
 		# shellcheck disable=SC1091
 		. "$library_dir/ownership.sh"
 		# shellcheck disable=SC1091
@@ -102,6 +170,25 @@ case $command_name in
 		# shellcheck disable=SC1091
 		. "$library_dir/result.sh"
 		result_emit source human ok success "$SOURCE_MESSAGE"
+		;;
+	hook)
+		[ "$#" -ge 1 ] || usage
+		hook_event=$1
+		hook_argument=${2:-}
+		case $hook_event in
+			services-start | services-stop | post-mount | unmount | firewall-start | reconcile) ;;
+			*) usage ;;
+		esac
+		for hook_library in paths entware configuration hooks ownership service platform lifecycle; do
+			# shellcheck disable=SC1090
+			. "$library_dir/$hook_library.sh"
+		done
+		paths_initialize
+		ownership_verify_code_root "$NUTMERLIN_JFFS_ROOT/addons/nutmerlin" || {
+			printf '%s\n' 'hook refused: installed code ownership evidence is incomplete' >&2
+			exit 78
+		}
+		service_run_locked lifecycle_hook "$hook_event" "$hook_argument"
 		;;
 	*) usage ;;
 esac

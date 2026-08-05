@@ -65,6 +65,7 @@ The platform module contains the only direct use of `/jffs/scripts`, `nvram`, `i
     VERSION
     installation.id
     entware.tsv
+    hooks.tsv
     owned-files
     enabled
 
@@ -82,6 +83,7 @@ The platform module contains the only direct use of `/jffs/scripts`, `nvram`, `i
 /tmp/nutmerlin/
     lock/
     run/
+        recovery.tsv
     state/
     log/
 ```
@@ -91,6 +93,8 @@ Candidate directories are created beneath `/opt/etc/nutmerlin/config`, not `/tmp
 The ambient `/opt/etc/nut` is never modified. Its unexpected configuration contributes to foreign-deployment refusal.
 
 `entware.tsv` records only the six observed required package names, versions, and one consistent architecture. It is ownership metadata, not a package lock or package-mutation plan.
+
+`hooks.tsv` records the exact owned block digest for each of the five Merlin hook files. Unrelated hook bytes remain outside those delimited blocks. `recovery.tsv` is a closed three-line volatile counter; healthy checks do not create it, success removes it, and reboot discards it.
 
 ## 4. Configuration activation
 
@@ -132,6 +136,8 @@ Managed blocks call one CLI hook entrypoint:
 - `firewall-start`: rebuild and verify only the owned NUT chain.
 
 The periodic job runs every five minutes. On a failed health check it attempts recovery. Three consecutive failures pause active restart for three checks, after which one probe is allowed. The counter is volatile, success clears it, and reboot begins a fresh bounded cycle.
+
+Status and diagnostics report the fixed dimensions `installation`, `enabled`, `storage`, `source`, `driver`, `upsd`, `upsc`, `listener`, `firewall`, `client_count`, and `recovery`. Diagnostics add one failed layer and one safe remediation. JSON uses the `nutmerlin.result.v1` envelope; these read paths write no persistent state.
 
 ## 7. Network path
 

@@ -6,11 +6,12 @@ repository_root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 nut_root=${NUTMERLIN_NUT_ROOT:-}
 test_scenario=${1:-}
 installed_root=
+integration_tab=$(printf '\t')
 
 case $test_scenario in
-	service | rollback) ;;
+	service | rollback | lifecycle) ;;
 	*)
-		printf '%s\n' 'usage: run-installed-core.sh service|rollback' >&2
+		printf '%s\n' 'usage: run-installed-core.sh service|rollback|lifecycle' >&2
 		exit 64
 		;;
 esac
@@ -62,6 +63,20 @@ cleanup_installed_root() {
 				NUTMERLIN_TEST_RUN_USER="$(id -un)" \
 				"$installed_cli" service stop >/dev/null 2>&1 || :
 		fi
+		for cleanup_pid_file in "$installed_root"/tmp/nutmerlin/run/upsd.pid \
+			"$installed_root"/tmp/nutmerlin/run/dummy-ups.pid; do
+			if [ ! -f "$cleanup_pid_file" ] || [ -L "$cleanup_pid_file" ]; then
+				continue
+			fi
+			cleanup_pid=$(cut -f1 "$cleanup_pid_file")
+			case $cleanup_pid in
+				'' | *[!0-9]*) continue ;;
+			esac
+			cleanup_executable=$(readlink "/proc/$cleanup_pid/exe" 2>/dev/null || :)
+			case $cleanup_executable in
+				"$installed_root"/opt*) kill "$cleanup_pid" 2>/dev/null || : ;;
+			esac
+		done
 		case $installed_root in
 			/tmp/nutmerlin-installed.*) rm -rf -- "$installed_root" ;;
 		esac
@@ -110,10 +125,26 @@ export NUTMERLIN_TEST_RUN_USER
 make --no-print-directory -C "$repository_root" install DESTDIR="$installed_root" \
 	>"$installed_root/install.log"
 installed_cli=$installed_root/jffs/addons/nutmerlin/bin/nutmerlin
-env NUTMERLIN_ENABLE_TEST_ADAPTERS=1 \
-	NUTMERLIN_TEST_ROOT="$installed_root" \
-	NUTMERLIN_TEST_RUN_USER="$NUTMERLIN_TEST_RUN_USER" \
-	"$installed_cli" service start >"$installed_root/start.log"
+
+invoke_cli() {
+	env NUTMERLIN_ENABLE_TEST_ADAPTERS=1 \
+		NUTMERLIN_TEST_ROOT="$installed_root" \
+		NUTMERLIN_TEST_RUN_USER="$NUTMERLIN_TEST_RUN_USER" \
+		"$installed_cli" "$@"
+}
+
+invoke_hook() {
+	env NUTMERLIN_ENABLE_TEST_ADAPTERS=1 \
+		NUTMERLIN_TEST_ROOT="$installed_root" \
+		NUTMERLIN_TEST_RUN_USER="$NUTMERLIN_TEST_RUN_USER" \
+		"$installed_root/jffs/scripts/$1"
+}
+
+if [ "$test_scenario" = lifecycle ]; then
+	invoke_hook services-start
+else
+	invoke_cli service start >"$installed_root/start.log"
+fi
 
 active_set_id=$(cat "$installed_root/opt/etc/nutmerlin/config/current")
 active_config=$installed_root/opt/etc/nutmerlin/config/sets/$active_set_id
@@ -127,6 +158,146 @@ printf '%s\n' "$upsc_observation" | grep -q '^ups.status: OL$'
 
 repeat_install_output=$(make --no-print-directory -C "$repository_root" install DESTDIR="$installed_root")
 [ "$repeat_install_output" = 'NUTMerlin already installed: owned state is complete' ]
+
+if [ "$test_scenario" = lifecycle ]; then
+	cru_state=$installed_root/platform/cru.tsv
+	[ "$(wc -l <"$cru_state")" -eq 1 ]
+	grep -F "NUTMerlin${integration_tab}*/5 * * * *${integration_tab}" "$cru_state" >/dev/null
+	initial_server_pid=$(cut -f1 "$installed_root/tmp/nutmerlin/run/upsd.pid")
+	initial_driver_pid=$(cut -f1 "$installed_root/tmp/nutmerlin/run/dummy-ups.pid")
+	invoke_hook services-start
+	[ "$(wc -l <"$cru_state")" -eq 1 ]
+	[ "$(cut -f1 "$installed_root/tmp/nutmerlin/run/upsd.pid")" = "$initial_server_pid" ]
+	[ "$(cut -f1 "$installed_root/tmp/nutmerlin/run/dummy-ups.pid")" = "$initial_driver_pid" ]
+	find "$installed_root/jffs" "$installed_root/opt" -type f -exec sha256sum {} \; | sort >"$installed_root/persistent-before-status.sha256"
+	invoke_cli status --json >"$installed_root/healthy-status.json"
+	find "$installed_root/jffs" "$installed_root/opt" -type f -exec sha256sum {} \; | sort >"$installed_root/persistent-after-status.sha256"
+	cmp "$installed_root/persistent-before-status.sha256" "$installed_root/persistent-after-status.sha256"
+	[ "$(jq -r '.status' "$installed_root/healthy-status.json")" = ok ]
+	set +e
+	env NUTMERLIN_ENABLE_TEST_ADAPTERS=1 \
+		NUTMERLIN_TEST_ROOT="$installed_root" \
+		NUTMERLIN_TEST_RUN_USER="$NUTMERLIN_TEST_RUN_USER" \
+		NUTMERLIN_TEST_STORAGE_STATE=missing \
+		"$installed_cli" status --json >"$installed_root/live-storage-loss-status.json"
+	live_storage_loss_status=$?
+	set -e
+	[ "$live_storage_loss_status" -eq 69 ]
+	[ "$(jq -r '.details.storage' "$installed_root/live-storage-loss-status.json")" = missing ]
+	[ "$(jq -r '.details.driver' "$installed_root/live-storage-loss-status.json")" = running ]
+	[ "$(jq -r '.details.upsd' "$installed_root/live-storage-loss-status.json")" = running ]
+
+	mkdir "$installed_root/tmp/nutmerlin/lock/lifecycle"
+	set +e
+	invoke_cli hook reconcile >"$installed_root/concurrent-reconcile.log" 2>&1
+	concurrent_reconcile_status=$?
+	set -e
+	[ "$concurrent_reconcile_status" -eq 75 ]
+	rmdir "$installed_root/tmp/nutmerlin/lock/lifecycle"
+
+	kill "$initial_server_pid"
+	dead_wait=0
+	while kill -0 "$initial_server_pid" 2>/dev/null && [ "$dead_wait" -lt 5 ]; do
+		dead_wait=$((dead_wait + 1))
+		sleep 1
+	done
+	if kill -0 "$initial_server_pid" 2>/dev/null; then
+		exit 1
+	fi
+	invoke_cli hook reconcile >/dev/null
+	recovered_server_pid=$(cut -f1 "$installed_root/tmp/nutmerlin/run/upsd.pid")
+	[ "$recovered_server_pid" != "$initial_server_pid" ]
+	"$installed_root/opt/bin/upsc" dummy@127.0.0.1 ups.status 2>/dev/null | grep -qx OL
+
+	invoke_hook services-stop
+	[ ! -e "$cru_state" ]
+	mv "$installed_root/opt" "$installed_root/opt.delayed"
+	invoke_hook services-start
+	[ -f "$cru_state" ]
+	set +e
+	invoke_cli status --json >"$installed_root/missing-status.json"
+	missing_status=$?
+	set -e
+	[ "$missing_status" -eq 69 ]
+	[ "$(jq -r '.details.storage' "$installed_root/missing-status.json")" = missing ]
+	mv "$installed_root/opt.delayed" "$installed_root/opt"
+	invoke_hook post-mount
+	"$installed_root/opt/bin/upsc" dummy@127.0.0.1 ups.status 2>/dev/null | grep -qx OL
+
+	chmod 500 "$installed_root/opt"
+	invoke_hook firewall-start
+	set +e
+	invoke_cli status --json >"$installed_root/read-only-status.json"
+	read_only_status=$?
+	set -e
+	[ "$read_only_status" -eq 69 ]
+	[ "$(jq -r '.details.storage' "$installed_root/read-only-status.json")" = read_only ]
+	chmod 700 "$installed_root/opt"
+	invoke_hook post-mount
+
+	config_installation_path=$installed_root/opt/etc/nutmerlin/installation.id
+	original_config_installation_id=$(cat "$config_installation_path")
+	printf '%s\n' '00000000000000000000000000000000' >"$config_installation_path"
+	invoke_cli hook reconcile >/dev/null || :
+	set +e
+	invoke_cli status --json >"$installed_root/replaced-status.json"
+	replaced_status=$?
+	set -e
+	[ "$replaced_status" -eq 69 ]
+	[ "$(jq -r '.details.storage' "$installed_root/replaced-status.json")" = replaced ]
+	printf '%s\n' "$original_config_installation_id" >"$config_installation_path"
+	chmod 600 "$config_installation_path"
+	invoke_hook post-mount
+	active_set_root=$installed_root/opt/etc/nutmerlin/config/sets/$(cat "$installed_root/opt/etc/nutmerlin/config/current")
+	chmod 644 "$active_set_root/model.tsv"
+	invoke_cli hook reconcile >/dev/null 2>&1 || :
+	set +e
+	invoke_cli status --json >"$installed_root/ownership-status.json"
+	ownership_status=$?
+	set -e
+	[ "$ownership_status" -eq 69 ]
+	[ "$(jq -r '.details.storage' "$installed_root/ownership-status.json")" = ownership_mismatch ]
+	chmod 600 "$active_set_root/model.tsv"
+	invoke_hook post-mount
+
+	invoke_hook services-stop
+	failure_attempt=1
+	while [ "$failure_attempt" -le 3 ]; do
+		env NUTMERLIN_ENABLE_TEST_ADAPTERS=1 \
+			NUTMERLIN_TEST_ROOT="$installed_root" \
+			NUTMERLIN_TEST_RUN_USER="$NUTMERLIN_TEST_RUN_USER" \
+			NUTMERLIN_TEST_ACTIVATION_FAIL=1 \
+			"$installed_root/jffs/scripts/services-start"
+		failure_attempt=$((failure_attempt + 1))
+	done
+	recovery_path=$installed_root/tmp/nutmerlin/run/recovery.tsv
+	grep -F "failures${integration_tab}3" "$recovery_path" >/dev/null
+	grep -F "pause${integration_tab}3" "$recovery_path" >/dev/null
+	pause_check=1
+	while [ "$pause_check" -le 3 ]; do
+		invoke_cli hook reconcile >/dev/null 2>&1 || :
+		[ ! -e "$installed_root/tmp/nutmerlin/run/upsd.pid" ]
+		pause_check=$((pause_check + 1))
+	done
+	grep -F "pause${integration_tab}0" "$recovery_path" >/dev/null
+	invoke_cli hook reconcile >/dev/null
+	[ ! -e "$recovery_path" ]
+	"$installed_root/opt/bin/upsc" dummy@127.0.0.1 ups.status 2>/dev/null | grep -qx OL
+
+	invoke_hook services-stop
+	rm -rf -- "$installed_root/tmp/nutmerlin"
+	invoke_hook services-start
+	"$installed_root/opt/bin/upsc" dummy@127.0.0.1 ups.status 2>/dev/null | grep -qx OL
+	pre_unrelated_unmount_pid=$(cut -f1 "$installed_root/tmp/nutmerlin/run/upsd.pid")
+	env NUTMERLIN_ENABLE_TEST_ADAPTERS=1 \
+		NUTMERLIN_TEST_ROOT="$installed_root" \
+		NUTMERLIN_TEST_RUN_USER="$NUTMERLIN_TEST_RUN_USER" \
+		"$installed_root/jffs/scripts/unmount" /tmp/unrelated-mount
+	[ "$(cut -f1 "$installed_root/tmp/nutmerlin/run/upsd.pid")" = "$pre_unrelated_unmount_pid" ]
+	invoke_hook unmount
+	[ -f "$cru_state" ]
+	invoke_hook firewall-start
+fi
 
 if [ "$test_scenario" = rollback ]; then
 	config_root=$installed_root/opt/etc/nutmerlin/config
@@ -198,6 +369,8 @@ fi
 
 if [ "$test_scenario" = rollback ]; then
 	printf '%s\n' 'activation rollback: preserved; retained sets: 2'
+elif [ "$test_scenario" = lifecycle ]; then
+	printf '%s\n' 'Merlin lifecycle: hooks=5 recovery=bounded status=healthy'
 else
 	printf '%s\n' 'installed dummy status: OL'
 fi

@@ -33,7 +33,7 @@ ownership_verify_code_root() {
 	[ -d "$verified_code_root" ] && [ ! -L "$verified_code_root" ] || return 1
 	[ "$(stat -c '%a' "$verified_code_root")" = 755 ] || return 1
 	[ "$(stat -c '%u' "$verified_code_root")" = "$ownership_expected_uid" ] || return 1
-	ownership_entry_count_is "$verified_code_root" 8 || return 1
+	ownership_entry_count_is "$verified_code_root" 9 || return 1
 	for owned_code_directory in bin lib share share/dummy; do
 		[ -d "$verified_code_root/$owned_code_directory" ] &&
 			[ ! -L "$verified_code_root/$owned_code_directory" ] || return 1
@@ -41,21 +41,23 @@ ownership_verify_code_root() {
 		[ "$(stat -c '%u' "$verified_code_root/$owned_code_directory")" = "$ownership_expected_uid" ] || return 1
 	done
 	ownership_entry_count_is "$verified_code_root/bin" 1 || return 1
-	ownership_entry_count_is "$verified_code_root/lib" 6 || return 1
+	ownership_entry_count_is "$verified_code_root/lib" 10 || return 1
 	ownership_entry_count_is "$verified_code_root/share" 1 || return 1
 	ownership_entry_count_is "$verified_code_root/share/dummy" 1 || return 1
 	for owned_code_file in VERSION bin/nutmerlin \
-		lib/configuration.sh lib/entware.sh lib/ownership.sh lib/paths.sh lib/result.sh lib/service.sh \
-		share/dummy/cyberpower.dev installation.id enabled entware.tsv owned-files; do
+		lib/configuration.sh lib/entware.sh lib/hooks.sh lib/lifecycle.sh lib/ownership.sh lib/paths.sh \
+		lib/platform.sh lib/result.sh lib/service.sh lib/status.sh \
+		share/dummy/cyberpower.dev installation.id enabled entware.tsv hooks.tsv owned-files; do
 		[ -f "$verified_code_root/$owned_code_file" ] &&
 			[ ! -L "$verified_code_root/$owned_code_file" ] || return 1
 		[ "$(stat -c '%h' "$verified_code_root/$owned_code_file")" = 1 ] || return 1
 		[ "$(stat -c '%u' "$verified_code_root/$owned_code_file")" = "$ownership_expected_uid" ] || return 1
 	done
-	[ "$(find "$verified_code_root" -type f | wc -l)" -eq 13 ] || return 1
+	[ "$(find "$verified_code_root" -type f | wc -l)" -eq 18 ] || return 1
 	[ "$(stat -c '%a' "$verified_code_root/installation.id")" = 600 ] || return 1
 	[ "$(stat -c '%a' "$verified_code_root/enabled")" = 600 ] || return 1
 	[ "$(stat -c '%a' "$verified_code_root/entware.tsv")" = 600 ] || return 1
+	[ "$(stat -c '%a' "$verified_code_root/hooks.tsv")" = 600 ] || return 1
 	[ "$(stat -c '%a' "$verified_code_root/owned-files")" = 600 ] || return 1
 	[ "$(stat -c '%a' "$verified_code_root/bin/nutmerlin")" = 755 ] || return 1
 	[ "$(stat -c '%a' "$verified_code_root/VERSION")" = 644 ] || return 1
@@ -63,19 +65,28 @@ ownership_verify_code_root() {
 	for owned_library in "$verified_code_root"/lib/*.sh; do
 		[ "$(stat -c '%a' "$owned_library")" = 644 ] || return 1
 	done
-	[ "$(cat "$verified_code_root/enabled")" = 1 ] || return 1
+	case $(cat "$verified_code_root/enabled") in
+		0 | 1) ;;
+		*) return 1 ;;
+	esac
 	manifest_inventory=$(awk '{ print $2 }' "$verified_code_root/owned-files")
 	[ "$manifest_inventory" = 'VERSION
 bin/nutmerlin
 entware.tsv
+hooks.tsv
 lib/configuration.sh
 lib/entware.sh
+lib/hooks.sh
+lib/lifecycle.sh
 lib/ownership.sh
 lib/paths.sh
+lib/platform.sh
 lib/result.sh
 lib/service.sh
+lib/status.sh
 share/dummy/cyberpower.dev' ] || return 1
 	(cd "$verified_code_root" && sha256sum -c owned-files >/dev/null 2>&1) || return 1
+	hooks_verify_all "$verified_code_root" || return 1
 }
 
 ownership_verify_config_root() {
@@ -157,6 +168,14 @@ ownership_has_foreign_hook() {
 			"$hook_path" >/dev/null 2>&1; then
 			return 0
 		fi
+		if grep -F 'NUTMerlin managed block:' "$hook_path" >/dev/null 2>&1; then
+			hook_basename=${hook_path##*/}
+			case ${NUTMERLIN_OWNERSHIP_STATE:-absent}:$hook_basename in
+				owned:services-start | owned:services-stop | owned:post-mount | \
+					owned:unmount | owned:firewall-start) ;;
+				*) return 0 ;;
+			esac
+		fi
 	done
 	return 1
 }
@@ -168,7 +187,7 @@ ownership_check_live_foreign_state() {
 	fi
 
 	# BusyBox ps is the portable Merlin process-list boundary.
-	process_snapshot=$(ps 2>/dev/null) || {
+	process_snapshot=$(platform_process_snapshot) || {
 		ownership_refuse 'NUT process state cannot be verified'
 		return $?
 	}
@@ -232,11 +251,7 @@ ownership_check_live_foreign_state() {
 	if [ "${NUTMERLIN_ENABLE_TEST_ADAPTERS:-0}" = 1 ]; then
 		return 0
 	fi
-	command -v ss >/dev/null 2>&1 || {
-		ownership_refuse 'TCP listener state cannot be verified'
-		return $?
-	}
-	listener_snapshot=$(ss -ltn 2>/dev/null) || {
+	listener_snapshot=$(platform_listener_snapshot) || {
 		ownership_refuse 'TCP listener state cannot be verified'
 		return $?
 	}
@@ -251,7 +266,8 @@ ownership_check_before_install() {
 	owned_config_root=$NUTMERLIN_OPT_ROOT/etc/nutmerlin
 	ambient_nut_root=$NUTMERLIN_OPT_ROOT/etc/nut
 	owned_runtime_root=$NUTMERLIN_TMP_ROOT/nutmerlin
-	for layout_parent in "$NUTMERLIN_JFFS_ROOT/addons" "$NUTMERLIN_OPT_ROOT/etc"; do
+	for layout_parent in "$NUTMERLIN_JFFS_ROOT/addons" "$NUTMERLIN_JFFS_ROOT/scripts" \
+		"$NUTMERLIN_OPT_ROOT/etc"; do
 		ownership_layout_parent_is_safe "$layout_parent" || {
 			ownership_refuse "layout parent is foreign or ambiguous: $layout_parent"
 			return $?

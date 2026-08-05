@@ -45,12 +45,18 @@ paths_initialize() {
 		NUTMERLIN_JFFS_ROOT=$NUTMERLIN_TEST_ROOT/jffs
 		NUTMERLIN_OPT_ROOT=$NUTMERLIN_TEST_ROOT/opt
 		NUTMERLIN_TMP_ROOT=$NUTMERLIN_TEST_ROOT/tmp
-		for private_child_root in "$NUTMERLIN_JFFS_ROOT" "$NUTMERLIN_OPT_ROOT" "$NUTMERLIN_TMP_ROOT"; do
+		for private_child_root in "$NUTMERLIN_JFFS_ROOT" "$NUTMERLIN_TMP_ROOT"; do
 			path_is_safe_test_child "$private_child_root" "$canonical_test_root" || {
 				printf '%s\n' 'test roots must be canonical directories beneath the private test root' >&2
 				return 78
 			}
 		done
+		if [ -e "$NUTMERLIN_OPT_ROOT" ] || [ -L "$NUTMERLIN_OPT_ROOT" ]; then
+			path_is_safe_test_child "$NUTMERLIN_OPT_ROOT" "$canonical_test_root" || {
+				printf '%s\n' 'test roots must be canonical directories beneath the private test root' >&2
+				return 78
+			}
+		fi
 	else
 		NUTMERLIN_JFFS_ROOT=/jffs
 		NUTMERLIN_OPT_ROOT=/opt

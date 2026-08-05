@@ -129,10 +129,14 @@ lib/
 lib/nutmerlin/
 lib/nutmerlin/configuration.sh
 lib/nutmerlin/entware.sh
+lib/nutmerlin/hooks.sh
+lib/nutmerlin/lifecycle.sh
 lib/nutmerlin/ownership.sh
 lib/nutmerlin/paths.sh
+lib/nutmerlin/platform.sh
 lib/nutmerlin/result.sh
 lib/nutmerlin/service.sh
+lib/nutmerlin/status.sh
 share/
 share/dummy/
 share/dummy/cyberpower.dev'

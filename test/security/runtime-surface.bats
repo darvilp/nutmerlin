@@ -37,6 +37,21 @@ setup() {
 	[ ! -e "$outside_root/nutmerlin" ]
 }
 
+@test "development install refuses a preexisting managed-hook marker without adopting it" {
+	entware_fixture_setup
+	mkdir "$NUTMERLIN_JFFS_ROOT/scripts"
+	hook_path=$NUTMERLIN_JFFS_ROOT/scripts/services-start
+	printf '%s\n' '# BEGIN NUTMerlin managed block: foreign services-start' >"$hook_path"
+	chmod 755 "$hook_path"
+
+	run make --no-print-directory -C "$REPOSITORY_ROOT" install DESTDIR="$NUTMERLIN_TEST_ROOT"
+
+	[ "$status" -eq 2 ]
+	[[ "$output" == *'NUTMerlin install refused: foreign Merlin hook references NUT'* ]]
+	[ "$(cat "$hook_path")" = '# BEGIN NUTMerlin managed block: foreign services-start' ]
+	[ ! -e "$NUTMERLIN_JFFS_ROOT/addons/nutmerlin" ]
+}
+
 @test "owned verification rejects a hard-linked code file even with recomputed checksums" {
 	entware_fixture_setup
 	make --no-print-directory -C "$REPOSITORY_ROOT" install DESTDIR="$NUTMERLIN_TEST_ROOT" >/dev/null
@@ -127,6 +142,57 @@ teardown() {
 
 	[ "$status" -eq 78 ]
 	[[ "$output" == *'service refused: partial or unsafe process state'* ]]
+	[ "$(cat "$outside_record")" = untouched ]
+}
+
+@test "lifecycle refuses and preserves a foreign periodic job" {
+	entware_fixture_setup
+	make --no-print-directory -C "$REPOSITORY_ROOT" install DESTDIR="$NUTMERLIN_TEST_ROOT" >/dev/null
+	platform_root=$NUTMERLIN_TEST_ROOT/platform
+	mkdir -m 700 "$platform_root"
+	printf 'NUTMerlin\t*/10 * * * *\t/foreign/maintenance\n' >"$platform_root/cru.tsv"
+	chmod 600 "$platform_root/cru.tsv"
+	cp "$platform_root/cru.tsv" "$BATS_TEST_TMPDIR/foreign-cru.tsv"
+	installed_cli=$NUTMERLIN_JFFS_ROOT/addons/nutmerlin/bin/nutmerlin
+
+	run env NUTMERLIN_ENABLE_TEST_ADAPTERS=1 \
+		NUTMERLIN_TEST_ROOT="$NUTMERLIN_TEST_ROOT" \
+		NUTMERLIN_TEST_RUN_USER="$(id -un)" \
+		"$installed_cli" hook services-start
+
+	[ "$status" -eq 78 ]
+	cmp "$BATS_TEST_TMPDIR/foreign-cru.tsv" "$platform_root/cru.tsv"
+
+	run env NUTMERLIN_ENABLE_TEST_ADAPTERS=1 \
+		NUTMERLIN_TEST_ROOT="$NUTMERLIN_TEST_ROOT" \
+		NUTMERLIN_TEST_RUN_USER="$(id -un)" \
+		"$installed_cli" hook services-stop
+
+	[ "$status" -eq 78 ]
+	cmp "$BATS_TEST_TMPDIR/foreign-cru.tsv" "$platform_root/cru.tsv"
+}
+
+@test "services-stop removes its exact periodic job even when process state is ambiguous" {
+	entware_fixture_setup
+	make --no-print-directory -C "$REPOSITORY_ROOT" install DESTDIR="$NUTMERLIN_TEST_ROOT" >/dev/null
+	platform_root=$NUTMERLIN_TEST_ROOT/platform
+	mkdir -m 700 "$platform_root"
+	installation_id=$(cat "$NUTMERLIN_JFFS_ROOT/addons/nutmerlin/installation.id")
+	periodic_command="$NUTMERLIN_JFFS_ROOT/addons/nutmerlin/bin/nutmerlin hook reconcile $installation_id"
+	printf 'NUTMerlin\t*/5 * * * *\t%s\n' "$periodic_command" >"$platform_root/cru.tsv"
+	chmod 600 "$platform_root/cru.tsv"
+	outside_record=$BATS_TEST_TMPDIR/outside-stop-record
+	printf '%s\n' untouched >"$outside_record"
+	ln -s "$outside_record" "$NUTMERLIN_TMP_ROOT/nutmerlin/run/upsd.pid"
+	installed_cli=$NUTMERLIN_JFFS_ROOT/addons/nutmerlin/bin/nutmerlin
+
+	run env NUTMERLIN_ENABLE_TEST_ADAPTERS=1 \
+		NUTMERLIN_TEST_ROOT="$NUTMERLIN_TEST_ROOT" \
+		NUTMERLIN_TEST_RUN_USER="$(id -un)" \
+		"$installed_cli" hook services-stop
+
+	[ "$status" -eq 78 ]
+	[ ! -e "$platform_root/cru.tsv" ]
 	[ "$(cat "$outside_record")" = untouched ]
 }
 

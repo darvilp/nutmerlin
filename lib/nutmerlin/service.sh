@@ -147,19 +147,47 @@ service_pid_is_owned() {
 	owned_role=$2
 	service_pid_record_read "$owned_pid_file" || return 1
 	service_binary_is_allowed "$owned_role" "$recorded_binary" || return 1
-	[ -r "/proc/$recorded_pid/exe" ] || return 1
-	observed_executable=$(readlink -f "/proc/$recorded_pid/exe" 2>/dev/null || :)
-	expected_executable=$(readlink -f "$recorded_binary" 2>/dev/null || :)
-	[ -n "$observed_executable" ] && [ "$observed_executable" = "$expected_executable" ] || return 1
-	observed_uid=$(awk '/^Uid:/ { print $2; exit }' "/proc/$recorded_pid/status" 2>/dev/null)
+	observed_executable=$(platform_process_executable "$recorded_pid" || :)
+	[ -n "$observed_executable" ] || return 1
+	case $observed_executable in
+		"$recorded_binary" | "$recorded_binary (deleted)") ;;
+		*)
+			expected_executable=$(readlink -f "$recorded_binary" 2>/dev/null || :)
+			[ -n "$expected_executable" ] && [ "$observed_executable" = "$expected_executable" ] || return 1
+			;;
+	esac
+	observed_uid=$(platform_process_uid "$recorded_pid")
 	[ "$observed_uid" = "$recorded_uid" ] || return 1
 	installed_id=$(cat "$NUTMERLIN_JFFS_ROOT/addons/nutmerlin/installation.id" 2>/dev/null || :)
 	[ "$recorded_installation_id" = "$installed_id" ] || return 1
 	expected_confpath=$NUTMERLIN_OPT_ROOT/etc/nutmerlin/config/sets/$recorded_set_id
-	tr '\000' '\n' <"/proc/$recorded_pid/environ" 2>/dev/null |
-		grep -Fx "NUT_CONFPATH=$expected_confpath" >/dev/null || return 1
-	tr '\000' '\n' <"/proc/$recorded_pid/environ" 2>/dev/null |
-		grep -Fx "NUTMERLIN_SERVICE_EPOCH=$recorded_epoch" >/dev/null
+	platform_process_has_environment "$recorded_pid" "NUT_CONFPATH=$expected_confpath" || return 1
+	platform_process_has_environment "$recorded_pid" "NUTMERLIN_SERVICE_EPOCH=$recorded_epoch"
+}
+
+service_current_set_id() {
+	service_current_path=$NUTMERLIN_OPT_ROOT/etc/nutmerlin/config/current
+	[ -f "$service_current_path" ] && [ ! -L "$service_current_path" ] || return 1
+	service_current_id=$(cat "$service_current_path")
+	service_id_is_valid "$service_current_id" || return 1
+	printf '%s\n' "$service_current_id"
+}
+
+service_pid_pair_is_owned_current() {
+	pair_server_record=$1
+	pair_driver_record=$2
+	service_pid_is_owned "$pair_server_record" upsd || return 1
+	service_pid_record_read "$pair_server_record" || return 1
+	pair_server_set_id=$recorded_set_id
+	pair_server_epoch=$recorded_epoch
+	service_pid_is_owned "$pair_driver_record" dummy || return 1
+	service_pid_record_read "$pair_driver_record" || return 1
+	pair_driver_set_id=$recorded_set_id
+	pair_driver_epoch=$recorded_epoch
+	pair_current_set_id=$(service_current_set_id) || return 1
+	[ "$pair_server_set_id" = "$pair_driver_set_id" ] &&
+		[ "$pair_server_set_id" = "$pair_current_set_id" ] &&
+		[ "$pair_server_epoch" = "$pair_driver_epoch" ]
 }
 
 service_write_pid_record() {
@@ -202,28 +230,26 @@ service_stop_pid_file() {
 	[ -e "$stop_pid_file" ] || [ -L "$stop_pid_file" ] || return 0
 	service_pid_record_read "$stop_pid_file" || return 78
 	stop_pid=$recorded_pid
-	if kill -0 "$stop_pid" 2>/dev/null; then
+	if platform_process_is_alive "$stop_pid"; then
 		service_pid_is_owned "$stop_pid_file" "$stop_role" || return 78
-		kill "$stop_pid" || return 75
+		platform_process_signal "$stop_pid" || return 75
 		stop_attempt=0
-		while kill -0 "$stop_pid" 2>/dev/null && [ "$stop_attempt" -lt 10 ]; do
+		while platform_process_is_alive "$stop_pid" && [ "$stop_attempt" -lt 10 ]; do
 			stop_attempt=$((stop_attempt + 1))
 			sleep 1
 		done
-		kill -0 "$stop_pid" 2>/dev/null && return 75
+		platform_process_is_alive "$stop_pid" && return 75
 	fi
 	rm -f -- "$stop_pid_file"
 }
 
 service_listener_is_clear() {
-	command -v ss >/dev/null 2>&1 || return 69
-	service_listener_snapshot=$(ss -ltn 2>/dev/null) || return 69
+	service_listener_snapshot=$(platform_listener_snapshot) || return 69
 	! printf '%s\n' "$service_listener_snapshot" | awk 'NR > 1 { print $4 }' | grep -Eq '(^|:)3493$'
 }
 
 service_listener_is_loopback_only() {
-	command -v ss >/dev/null 2>&1 || return 69
-	service_listener_snapshot=$(ss -ltn 2>/dev/null) || return 69
+	service_listener_snapshot=$(platform_listener_snapshot) || return 69
 	service_listener_addresses=$(printf '%s\n' "$service_listener_snapshot" | awk 'NR > 1 && $4 ~ /:3493$/ { print $4 }')
 	[ "$service_listener_addresses" = '127.0.0.1:3493' ]
 }
@@ -264,11 +290,11 @@ service_stop() {
 
 service_cleanup_failed_start() {
 	if [ -n "${started_server_pid:-}" ]; then
-		kill "$started_server_pid" 2>/dev/null || :
+		platform_process_signal "$started_server_pid" 2>/dev/null || :
 		wait "$started_server_pid" 2>/dev/null || :
 	fi
 	if [ -n "${started_driver_pid:-}" ]; then
-		kill "$started_driver_pid" 2>/dev/null || :
+		platform_process_signal "$started_driver_pid" 2>/dev/null || :
 		wait "$started_driver_pid" 2>/dev/null || :
 	fi
 	rm -f -- "$service_runtime_root/run/upsd.pid" "$service_runtime_root/run/dummy-ups.pid"
@@ -305,8 +331,8 @@ service_start() {
 		return 78
 	fi
 	if [ "$server_pid_present" -eq 1 ]; then
-		if service_pid_is_owned "$service_runtime_root/run/upsd.pid" upsd &&
-			service_pid_is_owned "$service_runtime_root/run/dummy-ups.pid" dummy &&
+		if service_pid_pair_is_owned_current "$service_runtime_root/run/upsd.pid" \
+			"$service_runtime_root/run/dummy-ups.pid" &&
 			service_query_dummy && service_listener_is_loopback_only; then
 			SERVICE_MESSAGE='dummy is already running on loopback'
 			export SERVICE_MESSAGE
@@ -348,7 +374,7 @@ service_start() {
 		sleep 1
 	done
 	if [ ! -e "$service_runtime_root/state/dummy-ups-dummy" ] ||
-		! kill -0 "$started_driver_pid" 2>/dev/null; then
+		! platform_process_is_alive "$started_driver_pid"; then
 		service_cleanup_failed_start
 		printf '%s\n' 'service temporary failure: dummy-ups did not start' >&2
 		return 75
