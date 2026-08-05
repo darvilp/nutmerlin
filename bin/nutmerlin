@@ -243,6 +243,67 @@ case $command_name in
 		. "$library_dir/result.sh"
 		result_emit source human ok success "$SOURCE_MESSAGE"
 		;;
+	lan)
+		[ "$#" -ge 1 ] || usage
+		lan_action=$1
+		shift
+		lan_address=
+		lan_cidr=
+		case $lan_action in
+			configure)
+				while [ "$#" -gt 0 ]; do
+					lan_option=$1
+					shift
+					[ "$#" -gt 0 ] || usage
+					lan_value=$1
+					shift
+					case $lan_option in
+						--address)
+							[ -z "$lan_address" ] || usage
+							lan_address=$lan_value
+							;;
+						--cidr)
+							[ -z "$lan_cidr" ] || usage
+							lan_cidr=$lan_value
+							;;
+						*) usage ;;
+					esac
+				done
+				if [ -z "$lan_address" ] || [ -z "$lan_cidr" ]; then
+					usage
+				fi
+				;;
+			disable) [ "$#" -eq 0 ] || usage ;;
+			*) usage ;;
+		esac
+		for lan_library in paths entware configuration hooks platform ownership service; do
+			# shellcheck disable=SC1090
+			. "$library_dir/$lan_library.sh"
+		done
+		paths_initialize
+		ownership_verify_installed_state || {
+			printf '%s\n' 'LAN exposure refused: installed ownership evidence is incomplete' >&2
+			exit 78
+		}
+		service_resolve_current
+		service_load_active_profile || {
+			printf '%s\n' 'LAN exposure refused: active source profile is invalid' >&2
+			exit 78
+		}
+		if [ "$SERVICE_SOURCE" = dummy ]; then
+			if [ "$lan_action" = configure ]; then
+				printf '%s\n' 'LAN exposure unavailable: active source is dummy' >&2
+				exit 69
+			fi
+			LAN_MESSAGE='trusted LAN is already disabled; dummy remains loopback-only'
+			export LAN_MESSAGE
+		else
+			service_run_locked configuration_activate_lan "$lan_action" "$lan_address" "$lan_cidr"
+		fi
+		# shellcheck disable=SC1091
+		. "$library_dir/result.sh"
+		result_emit lan human ok success "$LAN_MESSAGE"
+		;;
 	hook)
 		[ "$#" -ge 1 ] || usage
 		hook_event=$1

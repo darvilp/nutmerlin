@@ -55,6 +55,7 @@ lifecycle_service_is_healthy() {
 	service_resolve_current || return 1
 	service_load_active_profile || return 1
 	service_validate_active_source || return 1
+	service_validate_active_network || return 1
 	server_record=$NUTMERLIN_TMP_ROOT/nutmerlin/run/upsd.pid
 	driver_record=$NUTMERLIN_TMP_ROOT/nutmerlin/run/$SERVICE_DRIVER_RECORD_NAME
 	service_pid_pair_is_owned_current "$server_record" "$driver_record" \
@@ -62,7 +63,7 @@ lifecycle_service_is_healthy() {
 	service_runtime_root=$NUTMERLIN_TMP_ROOT/nutmerlin
 	export service_runtime_root
 	service_query_active || return 1
-	service_listener_is_loopback_only
+	service_network_is_expected
 }
 
 lifecycle_require_available_installation() {
@@ -136,18 +137,25 @@ lifecycle_reconcile() {
 		return 78
 	}
 	lifecycle_recovery_read || return $?
+	lifecycle_service_healthy=0
+	if lifecycle_service_is_healthy; then
+		lifecycle_service_healthy=1
+	else
+		# Restart backoff never postpones closing an unhealthy source or network boundary.
+		service_stop || return $?
+	fi
+	if [ "$lifecycle_service_healthy" -eq 1 ]; then
+		lifecycle_recovery_reset
+		LIFECYCLE_MESSAGE='service is healthy'
+		export LIFECYCLE_MESSAGE
+		return 0
+	fi
 	if [ "$RECOVERY_PAUSE" -gt 0 ]; then
 		RECOVERY_PAUSE=$((RECOVERY_PAUSE - 1))
 		lifecycle_recovery_write "$RECOVERY_FAILURES" "$RECOVERY_PAUSE" || return $?
 		LIFECYCLE_MESSAGE="recovery paused: checks_remaining=$RECOVERY_PAUSE"
 		export LIFECYCLE_MESSAGE
 		return 75
-	fi
-	if lifecycle_service_is_healthy; then
-		lifecycle_recovery_reset
-		LIFECYCLE_MESSAGE='service is healthy'
-		export LIFECYCLE_MESSAGE
-		return 0
 	fi
 	if service_restart; then
 		lifecycle_recovery_reset

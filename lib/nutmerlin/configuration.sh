@@ -38,6 +38,128 @@ configuration_normalize_busport() {
 	}'
 }
 
+configuration_normalize_ipv4() {
+	ipv4_value=$1
+	case $ipv4_value in
+		'' | *[!0-9.]*) return 1 ;;
+	esac
+	awk -F . 'NF == 4 {
+		for (i = 1; i <= 4; i++) {
+			if ($i == "" || $i !~ /^[0-9]+$/ || $i + 0 > 255 || $i != ($i + 0) "") exit 1
+		}
+		printf "%d.%d.%d.%d\n", $1, $2, $3, $4
+		exit 0
+	}
+	{ exit 1 }' <<EOF
+$ipv4_value
+EOF
+}
+
+configuration_ipv4_to_uint() {
+	configuration_normalize_ipv4 "$1" >/dev/null || return 1
+	awk -F . '{ printf "%.0f\n", (($1 * 256 + $2) * 256 + $3) * 256 + $4 }' <<EOF
+$1
+EOF
+}
+
+configuration_uint_to_ipv4() {
+	uint_value=$1
+	awk -v value="$uint_value" 'BEGIN {
+		if (value < 0 || value > 4294967295 || value != int(value)) exit 1
+		a = int(value / 16777216)
+		value -= a * 16777216
+		b = int(value / 65536)
+		value -= b * 65536
+		c = int(value / 256)
+		d = value - c * 256
+		printf "%d.%d.%d.%d\n", a, b, c, d
+	}'
+}
+
+configuration_normalize_cidr() {
+	cidr_value=$1
+	case $cidr_value in
+		*/*) ;;
+		*) return 1 ;;
+	esac
+	cidr_address=${cidr_value%/*}
+	cidr_prefix=${cidr_value##*/}
+	[ -n "$cidr_prefix" ] || return 1
+	case $cidr_prefix in
+		*[!0-9]*) return 1 ;;
+	esac
+	normalized_prefix=$(awk -v value="$cidr_prefix" 'BEGIN {
+		if (value !~ /^[0-9]+$/) exit 1
+		printf "%d\n", value + 0
+	}') || return 1
+	[ "$cidr_prefix" = "$normalized_prefix" ] || return 1
+	[ "$cidr_prefix" -ge 1 ] && [ "$cidr_prefix" -le 32 ] || return 1
+	cidr_address=$(configuration_normalize_ipv4 "$cidr_address") || return 1
+	cidr_uint=$(configuration_ipv4_to_uint "$cidr_address") || return 1
+	cidr_block=$(awk -v prefix="$cidr_prefix" 'BEGIN { printf "%.0f\n", 2 ^ (32 - prefix) }')
+	cidr_network=$(awk -v value="$cidr_uint" -v block="$cidr_block" \
+		'BEGIN { printf "%.0f\n", int(value / block) * block }')
+	[ "$cidr_uint" = "$cidr_network" ] || return 1
+	printf '%s/%s\n' "$cidr_address" "$cidr_prefix"
+}
+
+configuration_ipv4_is_safe_listener() {
+	listener_address=$(configuration_normalize_ipv4 "$1") || return 1
+	listener_uint=$(configuration_ipv4_to_uint "$listener_address") || return 1
+	[ "$listener_uint" -ne 0 ] &&
+		{ [ "$listener_uint" -lt 2130706432 ] || [ "$listener_uint" -gt 2147483647 ]; } &&
+		[ "$listener_uint" -lt 3758096384 ] && [ "$listener_uint" -ne 4294967295 ]
+}
+
+configuration_cidr_is_safe_source() {
+	trusted_cidr=$(configuration_normalize_cidr "$1") || return 1
+	trusted_network=${trusted_cidr%/*}
+	trusted_prefix=${trusted_cidr##*/}
+	trusted_start=$(configuration_ipv4_to_uint "$trusted_network") || return 1
+	trusted_size=$(awk -v prefix="$trusted_prefix" 'BEGIN { printf "%.0f\n", 2 ^ (32 - prefix) }')
+	trusted_end=$(awk -v start="$trusted_start" -v size="$trusted_size" \
+		'BEGIN { printf "%.0f\n", start + size - 1 }')
+	# Reject scopes that overlap unspecified, loopback, multicast, or limited broadcast space.
+	[ "$trusted_start" -gt 16777215 ] || return 1
+	[ "$trusted_end" -lt 2130706432 ] || [ "$trusted_start" -gt 2147483647 ] || return 1
+	[ "$trusted_end" -lt 3758096384 ] || return 1
+}
+
+configuration_netmask_prefix() {
+	netmask_value=$(configuration_normalize_ipv4 "$1") || return 1
+	awk -F . 'BEGIN {
+		bits[255] = 8; bits[254] = 7; bits[252] = 6; bits[248] = 5; bits[240] = 4
+		bits[224] = 3; bits[192] = 2; bits[128] = 1; bits[0] = 0
+	}
+	{
+		prefix = 0; partial = 0
+		for (i = 1; i <= 4; i++) {
+			if (!(($i + 0) in bits)) exit 1
+			if (partial && $i != 0) exit 1
+			prefix += bits[$i + 0]
+			if ($i != 255) partial = 1
+		}
+		if (prefix < 1 || prefix > 32) exit 1
+		print prefix
+	}' <<EOF
+$netmask_value
+EOF
+}
+
+configuration_network_cidr() {
+	network_address=$(configuration_normalize_ipv4 "$1") || return 1
+	network_prefix=$2
+	case $network_prefix in
+		'' | *[!0-9]*) return 1 ;;
+	esac
+	[ "$network_prefix" -ge 1 ] && [ "$network_prefix" -le 32 ] || return 1
+	network_uint=$(configuration_ipv4_to_uint "$network_address") || return 1
+	network_block=$(awk -v prefix="$network_prefix" 'BEGIN { printf "%.0f\n", 2 ^ (32 - prefix) }')
+	network_start=$(awk -v value="$network_uint" -v block="$network_block" \
+		'BEGIN { printf "%.0f\n", int(value / block) * block }')
+	printf '%s/%s\n' "$(configuration_uint_to_ipv4 "$network_start")" "$network_prefix"
+}
+
 configuration_render_dummy() {
 	candidate_root=$1
 	set_id=$2
@@ -74,10 +196,17 @@ configuration_render_usbhid() {
 	product_id=$5
 	identity_kind=$6
 	identity_value=$7
+	lan_address=${8:--}
+	lan_cidr=${9:--}
 
 	printf 'schema\tnutmerlin.model.v1\nsource\tups\nset_id\t%s\nvendor_id\t%s\nproduct_id\t%s\nidentity\t%s\nidentity_value\t%s\n' \
 		"$set_id" "$vendor_id" "$product_id" "$identity_kind" "$identity_value" \
 		>"$candidate_root/model.tsv"
+	if [ "$lan_address" != - ] || [ "$lan_cidr" != - ]; then
+		[ "$lan_address" != - ] && [ "$lan_cidr" != - ] || return 78
+		printf 'lan_address\t%s\nlan_cidr\t%s\n' "$lan_address" "$lan_cidr" \
+			>>"$candidate_root/model.tsv"
+	fi
 	{
 		printf 'statepath = %s/state\n\n' "$runtime_root"
 		printf '%s\n' '[ups]'
@@ -96,6 +225,7 @@ configuration_render_usbhid() {
 	{
 		printf 'STATEPATH %s/state\n' "$runtime_root"
 		printf '%s\n' 'LISTEN 127.0.0.1 3493'
+		[ "$lan_address" = - ] || printf 'LISTEN %s 3493\n' "$lan_address"
 	} >"$candidate_root/upsd.conf"
 	: >"$candidate_root/upsd.users"
 	chmod 600 "$candidate_root/model.tsv" "$candidate_root/ups.conf" \
@@ -134,7 +264,24 @@ configuration_read_model() {
 			CONFIGURATION_IDENTITY_VALUE=
 			;;
 		ups)
-			[ "$(wc -l <"$model_path")" -eq 7 ] || return 1
+			model_line_count=$(wc -l <"$model_path")
+			case $model_line_count in
+				7)
+					CONFIGURATION_LAN_ADDRESS=-
+					CONFIGURATION_LAN_CIDR=-
+					;;
+				9)
+					CONFIGURATION_LAN_ADDRESS=$(configuration_model_value "$model_path" 8 lan_address) || return 1
+					CONFIGURATION_LAN_CIDR=$(configuration_model_value "$model_path" 9 lan_cidr) || return 1
+					[ "$(configuration_normalize_ipv4 "$CONFIGURATION_LAN_ADDRESS" 2>/dev/null || :)" = \
+						"$CONFIGURATION_LAN_ADDRESS" ] || return 1
+					configuration_ipv4_is_safe_listener "$CONFIGURATION_LAN_ADDRESS" || return 1
+					[ "$(configuration_normalize_cidr "$CONFIGURATION_LAN_CIDR" 2>/dev/null || :)" = \
+						"$CONFIGURATION_LAN_CIDR" ] || return 1
+					configuration_cidr_is_safe_source "$CONFIGURATION_LAN_CIDR" || return 1
+					;;
+				*) return 1 ;;
+			esac
 			CONFIGURATION_VENDOR_ID=$(configuration_model_value "$model_path" 4 vendor_id) || return 1
 			CONFIGURATION_PRODUCT_ID=$(configuration_model_value "$model_path" 5 product_id) || return 1
 			CONFIGURATION_IDENTITY_KIND=$(configuration_model_value "$model_path" 6 identity) || return 1
@@ -154,6 +301,13 @@ configuration_read_model() {
 			;;
 		*) return 1 ;;
 	esac
+	if [ "$CONFIGURATION_SOURCE" = dummy ]; then
+		CONFIGURATION_LAN_ADDRESS=-
+		CONFIGURATION_LAN_CIDR=-
+	fi
+	export CONFIGURATION_SOURCE CONFIGURATION_SET_ID CONFIGURATION_VENDOR_ID
+	export CONFIGURATION_PRODUCT_ID CONFIGURATION_IDENTITY_KIND CONFIGURATION_IDENTITY_VALUE
+	export CONFIGURATION_LAN_ADDRESS CONFIGURATION_LAN_CIDR
 }
 
 configuration_validate_set() {
@@ -186,6 +340,8 @@ configuration_validate_set() {
 	validated_product_id=$CONFIGURATION_PRODUCT_ID
 	validated_identity_kind=$CONFIGURATION_IDENTITY_KIND
 	validated_identity_value=$CONFIGURATION_IDENTITY_VALUE
+	validated_lan_address=$CONFIGURATION_LAN_ADDRESS
+	validated_lan_cidr=$CONFIGURATION_LAN_CIDR
 	(
 		umask 077
 		validation_scratch=$(mktemp -d "$NUTMERLIN_TMP_ROOT/.nutmerlin-config-check.XXXXXX") || exit 1
@@ -198,7 +354,8 @@ configuration_validate_set() {
 			ups)
 				configuration_render_usbhid "$validation_scratch" "$validated_set_id" \
 					"$NUTMERLIN_TMP_ROOT/nutmerlin" "$validated_vendor_id" "$validated_product_id" \
-					"$validated_identity_kind" "$validated_identity_value"
+					"$validated_identity_kind" "$validated_identity_value" \
+					"$validated_lan_address" "$validated_lan_cidr"
 				;;
 			*) exit 1 ;;
 		esac
@@ -447,6 +604,9 @@ configuration_activate_profile() {
 	activation_product_id=${3:-}
 	activation_identity_kind=${4:-}
 	activation_identity_value=${5:-}
+	activation_lan_address=${6:--}
+	activation_lan_cidr=${7:--}
+	activation_fallback=allow
 	activation_config_root=$NUTMERLIN_OPT_ROOT/etc/nutmerlin/config
 	activation_sets_root=$activation_config_root/sets
 	activation_code_root=$NUTMERLIN_JFFS_ROOT/addons/nutmerlin
@@ -455,6 +615,15 @@ configuration_activate_profile() {
 	configuration_read_model "$activation_sets_root/$activation_previous_id" \
 		"$activation_previous_id" || return 78
 	activation_previous_source=$CONFIGURATION_SOURCE
+	activation_previous_lan_address=$CONFIGURATION_LAN_ADDRESS
+	activation_previous_lan_cidr=$CONFIGURATION_LAN_CIDR
+	if [ "$activation_previous_lan_address" != - ]; then
+		if [ "$activation_lan_address" = - ] ||
+			[ "$activation_lan_address" != "$activation_previous_lan_address" ] ||
+			[ "$activation_lan_cidr" != "$activation_previous_lan_cidr" ]; then
+			activation_fallback=discard
+		fi
+	fi
 	activation_old_last_good=
 	if [ -f "$activation_config_root/last-good" ]; then
 		activation_old_last_good=$(cat "$activation_config_root/last-good")
@@ -463,10 +632,6 @@ configuration_activate_profile() {
 	activation_candidate_root=$activation_sets_root/.candidate-$activation_new_id
 	activation_new_root=$activation_sets_root/$activation_new_id
 
-	if [ "$activation_profile" = ups ]; then
-		configuration_resolve_usb_identity "$activation_vendor_id" "$activation_product_id" \
-			"$activation_identity_kind" "$activation_identity_value" || return $?
-	fi
 	mkdir -m 700 "$activation_candidate_root"
 	case $activation_profile in
 		dummy)
@@ -476,7 +641,8 @@ configuration_activate_profile() {
 		ups)
 			configuration_render_usbhid "$activation_candidate_root" "$activation_new_id" \
 				"$activation_runtime_root" "$activation_vendor_id" "$activation_product_id" \
-				"$activation_identity_kind" "$activation_identity_value"
+				"$activation_identity_kind" "$activation_identity_value" \
+				"$activation_lan_address" "$activation_lan_cidr"
 			;;
 		*) return 78 ;;
 	esac
@@ -506,6 +672,17 @@ configuration_activate_profile() {
 	if [ "$activation_enabled" = 1 ]; then
 		if ! service_start; then
 			unset NUTMERLIN_TEST_ACTIVATION_FAIL
+			if [ "$activation_fallback" = discard ]; then
+				configuration_remove_selector "$activation_config_root" last-good || return $?
+				configuration_remove_set "$activation_sets_root" "$activation_previous_id" || return $?
+				if [ -n "$activation_old_last_good" ] &&
+					[ "$activation_old_last_good" != "$activation_previous_id" ]; then
+					configuration_remove_set "$activation_sets_root" "$activation_old_last_good" || return $?
+				fi
+				printf '%s\n' \
+					'configuration activation failed: safer LAN selection remains active and stopped' >&2
+				return 75
+			fi
 			if [ "$activation_profile" = ups ] && [ "$activation_previous_source" = dummy ]; then
 				configuration_finalize_real_over_dummy "$activation_config_root" \
 					"$activation_sets_root" "$activation_previous_id" \
@@ -529,7 +706,14 @@ configuration_activate_profile() {
 		fi
 	fi
 
-	if [ "$activation_profile" = ups ] && [ "$activation_previous_source" = dummy ]; then
+	if [ "$activation_fallback" = discard ]; then
+		configuration_remove_selector "$activation_config_root" last-good || return $?
+		configuration_remove_set "$activation_sets_root" "$activation_previous_id" || return $?
+		if [ -n "$activation_old_last_good" ] &&
+			[ "$activation_old_last_good" != "$activation_previous_id" ]; then
+			configuration_remove_set "$activation_sets_root" "$activation_old_last_good" || return $?
+		fi
+	elif [ "$activation_profile" = ups ] && [ "$activation_previous_source" = dummy ]; then
 		if ! configuration_finalize_real_over_dummy "$activation_config_root" \
 			"$activation_sets_root" "$activation_previous_id" "$activation_old_last_good"; then
 			service_stop || :
@@ -575,5 +759,43 @@ configuration_activate_dummy() {
 }
 
 configuration_activate_usbhid() {
+	configuration_resolve_usb_identity "$1" "$2" "$3" "$4" || return $?
 	configuration_activate_profile ups "$1" "$2" "$3" "$4"
+}
+
+configuration_activate_lan() {
+	lan_activation_action=$1
+	lan_activation_address=${2:--}
+	lan_activation_cidr=${3:--}
+	service_resolve_current || return $?
+	service_load_active_profile || return $?
+	[ "$SERVICE_SOURCE" = ups ] || return 69
+	case $lan_activation_action in
+		configure)
+			platform_validate_lan_scope "$lan_activation_address" "$lan_activation_cidr" || return $?
+			configuration_resolve_usb_identity "$CONFIGURATION_VENDOR_ID" \
+				"$CONFIGURATION_PRODUCT_ID" "$CONFIGURATION_IDENTITY_KIND" \
+				"$CONFIGURATION_IDENTITY_VALUE" || return $?
+			;;
+		disable)
+			lan_activation_address=-
+			lan_activation_cidr=-
+			;;
+		*) return 64 ;;
+	esac
+	configuration_activate_profile ups "$CONFIGURATION_VENDOR_ID" "$CONFIGURATION_PRODUCT_ID" \
+		"$CONFIGURATION_IDENTITY_KIND" "$CONFIGURATION_IDENTITY_VALUE" \
+		"$lan_activation_address" "$lan_activation_cidr" || return $?
+	activation_enabled=$(cat "$NUTMERLIN_JFFS_ROOT/addons/nutmerlin/enabled" 2>/dev/null || :)
+	case $lan_activation_action:$activation_enabled in
+		configure:1)
+			LAN_MESSAGE="trusted LAN active; address=$lan_activation_address cidr=$lan_activation_cidr"
+			;;
+		configure:*)
+			LAN_MESSAGE="trusted LAN configured while service is disabled; address=$lan_activation_address cidr=$lan_activation_cidr"
+			;;
+		disable:1) LAN_MESSAGE='trusted LAN disabled; service is loopback-only' ;;
+		disable:*) LAN_MESSAGE='trusted LAN disabled while service is disabled' ;;
+	esac
+	export LAN_MESSAGE
 }

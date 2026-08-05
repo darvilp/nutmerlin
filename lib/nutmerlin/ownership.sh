@@ -249,7 +249,12 @@ ownership_check_live_foreign_state() {
 			ownership_refuse 'an additional foreign NUT process is active'
 			return $?
 		}
-		service_listener_is_loopback_only || {
+		if ! service_resolve_current >/dev/null 2>&1 ||
+			! service_load_active_profile >/dev/null 2>&1; then
+			ownership_refuse 'active NUT network profile cannot be verified'
+			return $?
+		fi
+		service_network_is_expected || {
 			ownership_refuse 'owned NUT listener state cannot be verified'
 			return $?
 		}

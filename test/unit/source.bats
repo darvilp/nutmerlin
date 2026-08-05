@@ -393,7 +393,7 @@ teardown() {
 		paths_initialize
 		service_pid_pair_is_owned_current() { return 0; }
 		service_query_active() { return 0; }
-		service_listener_is_loopback_only() { return 0; }
+		service_network_is_expected() { return 0; }
 		lifecycle_service_is_healthy
 	'
 	[ "$status" -eq 1 ]
@@ -410,7 +410,7 @@ teardown() {
 		paths_initialize
 		service_pid_pair_is_owned_current() { return 0; }
 		service_query_active() { return 0; }
-		service_listener_is_loopback_only() { return 0; }
+		service_network_is_expected() { return 0; }
 		lifecycle_service_is_healthy
 	'
 	[ "$status" -eq 0 ]

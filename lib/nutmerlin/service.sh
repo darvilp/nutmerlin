@@ -46,8 +46,10 @@ service_load_active_profile() {
 			;;
 		*) return 78 ;;
 	esac
+	SERVICE_LAN_ADDRESS=$CONFIGURATION_LAN_ADDRESS
+	SERVICE_LAN_CIDR=$CONFIGURATION_LAN_CIDR
 	export SERVICE_SOURCE SERVICE_DRIVER_ROLE SERVICE_DRIVER_RECORD_NAME
-	export SERVICE_DRIVER_SOCKET_NAME SERVICE_UPS_NAME
+	export SERVICE_DRIVER_SOCKET_NAME SERVICE_UPS_NAME SERVICE_LAN_ADDRESS SERVICE_LAN_CIDR
 }
 
 service_load_active_driver_binary() {
@@ -63,6 +65,11 @@ service_validate_active_source() {
 	[ "$SERVICE_SOURCE" != ups ] || configuration_resolve_usb_identity \
 		"$CONFIGURATION_VENDOR_ID" "$CONFIGURATION_PRODUCT_ID" \
 		"$CONFIGURATION_IDENTITY_KIND" "$CONFIGURATION_IDENTITY_VALUE"
+}
+
+service_validate_active_network() {
+	[ "${SERVICE_LAN_ADDRESS:--}" = - ] ||
+		platform_validate_lan_scope "$SERVICE_LAN_ADDRESS" "$SERVICE_LAN_CIDR"
 }
 
 service_run_user() {
@@ -298,6 +305,56 @@ service_listener_is_loopback_only() {
 	[ "$service_listener_addresses" = '127.0.0.1:3493' ]
 }
 
+service_listener_is_expected() {
+	service_listener_snapshot=$(platform_listener_snapshot) || return 69
+	service_listener_addresses=$(printf '%s\n' "$service_listener_snapshot" |
+		awk 'NR > 1 && $4 ~ /:3493$/ { print $4 }' | sort)
+	if [ "${SERVICE_LAN_ADDRESS:--}" = - ]; then
+		service_expected_addresses='127.0.0.1:3493'
+	else
+		service_expected_addresses=$(printf '127.0.0.1:3493\n%s:3493\n' \
+			"$SERVICE_LAN_ADDRESS" | sort)
+	fi
+	[ "$service_listener_addresses" = "$service_expected_addresses" ]
+}
+
+service_firewall_is_expected() {
+	if [ "${SERVICE_LAN_ADDRESS:--}" = - ]; then
+		platform_firewall_is_absent
+	else
+		platform_firewall_state "$SERVICE_LAN_ADDRESS" "$SERVICE_LAN_CIDR"
+	fi
+}
+
+service_network_prepare() {
+	if [ "${SERVICE_LAN_ADDRESS:--}" = - ]; then
+		platform_firewall_is_absent || {
+			printf '%s\n' 'service refused: stale or ambiguous trusted-LAN firewall state is present' >&2
+			return 78
+		}
+	else
+		if platform_firewall_ensure "$SERVICE_LAN_ADDRESS" "$SERVICE_LAN_CIDR"; then
+			:
+		else
+			service_firewall_status=$?
+			printf '%s\n' 'service refused: trusted-LAN firewall state could not be installed exactly' >&2
+			return "$service_firewall_status"
+		fi
+	fi
+}
+
+service_network_close() {
+	if [ "${SERVICE_LAN_ADDRESS:--}" = - ]; then
+		platform_firewall_is_absent || return 78
+	else
+		platform_firewall_close "$SERVICE_LAN_ADDRESS" "$SERVICE_LAN_CIDR"
+	fi
+}
+
+service_network_is_expected() {
+	service_listener_is_expected && service_firewall_is_expected
+}
+
 service_query_dummy() {
 	query_attempt=0
 	while [ "$query_attempt" -lt 10 ]; do
@@ -354,6 +411,12 @@ service_query_active() {
 
 service_stop() {
 	service_runtime_root=$NUTMERLIN_TMP_ROOT/nutmerlin
+	service_stop_network_known=0
+	SERVICE_LAN_ADDRESS=-
+	SERVICE_LAN_CIDR=-
+	if service_resolve_current >/dev/null 2>&1 && service_load_active_profile >/dev/null 2>&1; then
+		service_stop_network_known=1
+	fi
 	service_stop_pid_file "$service_runtime_root/run/upsd.pid" upsd || {
 		printf '%s\n' 'service refused: upsd process identity is not owned' >&2
 		return 78
@@ -370,6 +433,10 @@ service_stop() {
 		printf '%s\n' 'service refused: an unowned listener remains on port 3493' >&2
 		return 78
 	}
+	if [ "$service_stop_network_known" -eq 1 ] && ! service_network_close; then
+		printf '%s\n' 'service refused: trusted-LAN firewall state is ambiguous' >&2
+		return 78
+	fi
 	SERVICE_MESSAGE='owned NUT processes are stopped'
 	export SERVICE_MESSAGE
 }
@@ -385,6 +452,7 @@ service_cleanup_failed_start() {
 	fi
 	rm -f -- "$service_runtime_root/run/upsd.pid" "$service_runtime_root/run/dummy-ups.pid" \
 		"$service_runtime_root/run/usbhid-ups.pid"
+	service_network_close >/dev/null 2>&1 || :
 }
 
 service_start() {
@@ -396,6 +464,7 @@ service_start() {
 	}
 	service_load_active_driver_binary || return $?
 	service_validate_active_source || return $?
+	service_validate_active_network || return $?
 	service_user=$(service_run_user) || {
 		printf '%s\n' 'service unavailable: unprivileged NUT user is unavailable' >&2
 		return 69
@@ -436,8 +505,12 @@ service_start() {
 	fi
 	if [ "$server_pid_present" -eq 1 ]; then
 		if service_pid_pair_is_owned_current "$server_pid_path" "$driver_pid_path" \
-			"$SERVICE_DRIVER_ROLE" && service_query_active && service_listener_is_loopback_only; then
-			SERVICE_MESSAGE="$SERVICE_UPS_NAME is already running on loopback"
+			"$SERVICE_DRIVER_ROLE" && service_query_active && service_network_is_expected; then
+			if [ "$SERVICE_LAN_ADDRESS" = - ]; then
+				SERVICE_MESSAGE="$SERVICE_UPS_NAME is already running on loopback"
+			else
+				SERVICE_MESSAGE="$SERVICE_UPS_NAME is already running for trusted LAN $SERVICE_LAN_CIDR"
+			fi
 			export SERVICE_MESSAGE
 			return 0
 		fi
@@ -448,6 +521,7 @@ service_start() {
 		printf '%s\n' 'service refused: port 3493 is already occupied' >&2
 		return 78
 	}
+	service_network_prepare || return $?
 
 	started_driver_pid=
 	started_server_pid=
@@ -502,8 +576,10 @@ service_start() {
 	service_health_failure=
 	if ! service_query_active; then
 		service_health_failure=query
-	elif ! service_listener_is_loopback_only; then
+	elif ! service_listener_is_expected; then
 		service_health_failure=listener
+	elif ! service_firewall_is_expected; then
+		service_health_failure=firewall
 	elif [ "$service_injected_failure" -eq 1 ]; then
 		service_health_failure=injected
 	fi
@@ -514,7 +590,11 @@ service_start() {
 		return 75
 	fi
 
-	SERVICE_MESSAGE="$SERVICE_UPS_NAME is running on loopback"
+	if [ "$SERVICE_LAN_ADDRESS" = - ]; then
+		SERVICE_MESSAGE="$SERVICE_UPS_NAME is running on loopback"
+	else
+		SERVICE_MESSAGE="$SERVICE_UPS_NAME is running for trusted LAN $SERVICE_LAN_CIDR"
+	fi
 	export SERVICE_MESSAGE
 }
 

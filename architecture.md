@@ -106,7 +106,7 @@ The ambient `/opt/etc/nut` is never modified. Its unexpected configuration contr
 6. Close external admission and stop the affected NUT stack.
 7. Atomically select the candidate through `current.new -> current`.
 8. Start the exact set and prove driver, `upsd`, `upsc`, source identity, and applicable listener/firewall state.
-9. On failure, select the old set once and restart it.
+9. On failure, select the old set once only when that cannot reopen a removed LAN or credential scope; otherwise keep the safer candidate selected and stopped.
 10. On success, select the previous set as last-good and delete older sets.
 
 Security-reducing changes—credential revocation, LAN narrowing/disable, addon disable—replace last-good with the new restricted state after successful activation. Automatic fallback may not reopen a scope or credential the administrator removed.
@@ -143,7 +143,7 @@ Status and diagnostics report the fixed dimensions `installation`, `enabled`, `s
 
 Dummy always renders loopback only. A healthy real source may render loopback plus one administrator-entered router LAN address. Before that server starts, the platform adapter creates and verifies an owned firewall chain admitting one administrator-entered source CIDR and denying other sources to that address and TCP port 3493.
 
-The firewall hook recreates the rule after firmware firewall rebuild. Failure to establish or verify the chain selects a loopback-only configuration. NUTMerlin never rewrites unrelated chains or router network configuration.
+The firewall hook recreates the rule after firmware firewall rebuild. Failure to establish or verify the chain restores a known loopback-only set when safe, or leaves the selected service stopped when fallback could reopen removed access. NUTMerlin never rewrites unrelated chains or router network configuration.
 
 ## 8. Client credentials
 

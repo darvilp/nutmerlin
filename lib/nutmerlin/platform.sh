@@ -145,6 +145,110 @@ platform_usb_snapshot() {
 	done
 }
 
+platform_network_snapshot() {
+	if [ "${NUTMERLIN_ENABLE_TEST_ADAPTERS:-0}" = 1 ]; then
+		platform_network_fixture=$NUTMERLIN_TEST_ROOT/platform/network.tsv
+		[ -f "$platform_network_fixture" ] && [ ! -L "$platform_network_fixture" ] || return 69
+		[ "$(stat -c '%a' "$platform_network_fixture")" = 600 ] || return 78
+		[ "$(stat -c '%h' "$platform_network_fixture")" = 1 ] || return 78
+		[ "$(stat -c '%u' "$platform_network_fixture")" = "$(id -u)" ] || return 78
+		cat "$platform_network_fixture"
+		return 0
+	fi
+	command -v nvram >/dev/null 2>&1 || return 69
+	platform_lan_address=$(nvram get lan_ipaddr 2>/dev/null) || return 69
+	platform_lan_netmask=$(nvram get lan_netmask 2>/dev/null) || return 69
+	printf 'schema\tnutmerlin.network.v1\n'
+	printf 'lan_address\t%s\n' "$platform_lan_address"
+	printf 'lan_netmask\t%s\n' "$platform_lan_netmask"
+	platform_wan_count=0
+	for platform_wan_key in wan_ipaddr wan0_ipaddr wan1_ipaddr; do
+		platform_wan_address=$(nvram get "$platform_wan_key" 2>/dev/null) || return 69
+		case $platform_wan_address in
+			'' | 0.0.0.0) continue ;;
+		esac
+		printf 'wan_address\t%s\n' "$platform_wan_address"
+		platform_wan_count=$((platform_wan_count + 1))
+	done
+	[ "$platform_wan_count" -gt 0 ] || printf 'wan_address\t-\n'
+}
+
+platform_validate_lan_scope() (
+	requested_address=$(configuration_normalize_ipv4 "$1") || {
+		printf '%s\n' 'LAN exposure refused: address must be a canonical IPv4 address' >&2
+		return 78
+	}
+	configuration_ipv4_is_safe_listener "$requested_address" || {
+		printf '%s\n' 'LAN exposure refused: address is not a safe unicast listener' >&2
+		return 78
+	}
+	requested_cidr=$(configuration_normalize_cidr "$2") || {
+		printf '%s\n' 'LAN exposure refused: CIDR must be a canonical IPv4 network with prefix 1-32' >&2
+		return 78
+	}
+	configuration_cidr_is_safe_source "$requested_cidr" || {
+		printf '%s\n' 'LAN exposure refused: CIDR overlaps a reserved or unsafe scope' >&2
+		return 78
+	}
+	network_snapshot=$(mktemp "$NUTMERLIN_TMP_ROOT/.nutmerlin-network.XXXXXX") || return 75
+	trap 'rm -f -- "$network_snapshot"' EXIT HUP INT TERM
+	platform_network_snapshot >"$network_snapshot" || {
+		network_status=$?
+		printf '%s\n' 'LAN exposure unavailable: router network state could not be verified' >&2
+		return "$network_status"
+	}
+	network_line_count=$(wc -l <"$network_snapshot")
+	if [ "$network_line_count" -lt 4 ] || [ "$network_line_count" -gt 6 ]; then
+		printf '%s\n' 'LAN exposure refused: router network state is malformed' >&2
+		return 78
+	fi
+	[ "$(sed -n '1p' "$network_snapshot")" = "$(printf 'schema\tnutmerlin.network.v1')" ] || {
+		printf '%s\n' 'LAN exposure refused: router network state is malformed' >&2
+		return 78
+	}
+	network_tab=$(printf '\t')
+	observed_lan_address=$(awk -F "$network_tab" '$1 == "lan_address" && NF == 2 { print $2; count++ } END { if (count != 1) exit 1 }' "$network_snapshot") || return 78
+	observed_lan_netmask=$(awk -F "$network_tab" '$1 == "lan_netmask" && NF == 2 { print $2; count++ } END { if (count != 1) exit 1 }' "$network_snapshot") || return 78
+	[ "$(awk -F "$network_tab" 'NR > 1 && $1 !~ /^(lan_address|lan_netmask|wan_address)$/ { count++ } END { print count + 0 }' "$network_snapshot")" -eq 0 ] || return 78
+	[ "$(configuration_normalize_ipv4 "$observed_lan_address" 2>/dev/null || :)" = "$observed_lan_address" ] || return 78
+	[ "$requested_address" = "$observed_lan_address" ] || {
+		printf '%s\n' 'LAN exposure refused: address does not equal the router LAN IPv4 address' >&2
+		return 78
+	}
+	lan_prefix=$(configuration_netmask_prefix "$observed_lan_netmask") || return 78
+	physical_cidr=$(configuration_network_cidr "$observed_lan_address" "$lan_prefix") || return 78
+	physical_start=$(configuration_ipv4_to_uint "${physical_cidr%/*}") || return 78
+	physical_size=$(awk -v prefix="$lan_prefix" 'BEGIN { printf "%.0f\n", 2 ^ (32 - prefix) }')
+	physical_end=$(awk -v start="$physical_start" -v size="$physical_size" 'BEGIN { printf "%.0f\n", start + size - 1 }')
+	requested_uint=$(configuration_ipv4_to_uint "$requested_address") || return 78
+	if [ "$lan_prefix" -lt 32 ] &&
+		{ [ "$requested_uint" = "$physical_start" ] || [ "$requested_uint" = "$physical_end" ]; }; then
+		printf '%s\n' 'LAN exposure refused: router LAN address is a network or broadcast address' >&2
+		return 78
+	fi
+	requested_cidr_prefix=${requested_cidr##*/}
+	requested_cidr_start=$(configuration_ipv4_to_uint "${requested_cidr%/*}") || return 78
+	if [ "$requested_cidr_prefix" -eq 32 ] && [ "$lan_prefix" -lt 32 ] &&
+		[ "$requested_cidr_start" = "$physical_end" ]; then
+		printf '%s\n' 'LAN exposure refused: CIDR selects the router LAN broadcast address' >&2
+		return 78
+	fi
+	wan_count=0
+	while IFS="$network_tab" read -r network_key network_value network_extra; do
+		[ "$network_key" = wan_address ] || continue
+		[ -z "$network_extra" ] || return 78
+		wan_count=$((wan_count + 1))
+		[ "$network_value" = - ] || {
+			[ "$(configuration_normalize_ipv4 "$network_value" 2>/dev/null || :)" = "$network_value" ] || return 78
+			[ "$requested_address" != "$network_value" ] || {
+				printf '%s\n' 'LAN exposure refused: address equals a router WAN IPv4 address' >&2
+				return 78
+			}
+		}
+	done <"$network_snapshot"
+	[ "$wan_count" -ge 1 ] || return 78
+)
+
 platform_storage_state() {
 	case ${NUTMERLIN_TEST_STORAGE_STATE:-} in
 		missing | read_only | replaced | ownership_mismatch | unknown)
@@ -316,6 +420,229 @@ platform_cru_remove() {
 		[ "$platform_cru_state" -eq 1 ] && return 0
 		return "$platform_cru_state"
 	fi
+}
+
+platform_firewall_chain=NUTMERLIN
+
+platform_firewall_marker() {
+	platform_firewall_installation_id=$(cat \
+		"$NUTMERLIN_JFFS_ROOT/addons/nutmerlin/installation.id" 2>/dev/null || :)
+	ownership_id_is_valid "$platform_firewall_installation_id" || return 78
+	printf 'nutmerlin:%s\n' "$platform_firewall_installation_id"
+}
+
+platform_firewall_expected_record() {
+	platform_firewall_address=$1
+	platform_firewall_cidr=$2
+	platform_firewall_marker=$(platform_firewall_marker) || return $?
+	platform_firewall_installation_id=${platform_firewall_marker#nutmerlin:}
+	printf 'schema\tnutmerlin.firewall.v1\n'
+	printf 'installation_id\t%s\n' "$platform_firewall_installation_id"
+	printf 'chain\t%s\n' "$platform_firewall_chain"
+	printf 'jump\tINPUT\t1\ttcp\t%s\t3493\t%s\t%s\n' \
+		"$platform_firewall_address" "$platform_firewall_chain" "$platform_firewall_marker"
+	printf 'allow\t%s\t%s\ttcp\t3493\t%s\n' \
+		"$platform_firewall_cidr" "$platform_firewall_address" "$platform_firewall_marker"
+	printf 'deny\t0.0.0.0/0\t%s\ttcp\t3493\t%s\n' \
+		"$platform_firewall_address" "$platform_firewall_marker"
+}
+
+platform_firewall_adapter_state() {
+	platform_firewall_address=$1
+	platform_firewall_cidr=$2
+	platform_firewall_path=$NUTMERLIN_TEST_ROOT/platform/firewall.tsv
+	if [ ! -e "$platform_firewall_path" ] && [ ! -L "$platform_firewall_path" ]; then
+		return 1
+	fi
+	[ -f "$platform_firewall_path" ] && [ ! -L "$platform_firewall_path" ] || return 78
+	[ "$(stat -c '%a' "$platform_firewall_path")" = 600 ] || return 78
+	[ "$(stat -c '%h' "$platform_firewall_path")" = 1 ] || return 78
+	[ "$(stat -c '%u' "$platform_firewall_path")" = "$(id -u)" ] || return 78
+	platform_firewall_expected=$(platform_firewall_expected_record \
+		"$platform_firewall_address" "$platform_firewall_cidr") || return $?
+	[ "$(cat "$platform_firewall_path")" = "$platform_firewall_expected" ] || return 78
+}
+
+platform_firewall_reference_count() {
+	awk -v chain="$platform_firewall_chain" '
+		{
+			for (field = 1; field < NF; field++) {
+				if (($field == "-j" || $field == "-g") && $(field + 1) == chain) count++
+			}
+		}
+		END { print count + 0 }
+	'
+}
+
+platform_firewall_iptables_state() {
+	platform_firewall_address=$1
+	platform_firewall_cidr=$2
+	command -v iptables >/dev/null 2>&1 || return 69
+	platform_firewall_marker=$(platform_firewall_marker) || return $?
+	platform_firewall_all_rules=$(iptables -S 2>/dev/null) || return 69
+	if ! platform_firewall_chain_rules=$(iptables -S "$platform_firewall_chain" 2>/dev/null); then
+		if printf '%s\n' "$platform_firewall_all_rules" |
+			grep -Fx -- "-N $platform_firewall_chain" >/dev/null; then
+			return 69
+		fi
+		return 1
+	fi
+	platform_firewall_input_rules=$(iptables -S INPUT 2>/dev/null) || return 69
+	[ "$(printf '%s\n' "$platform_firewall_all_rules" | platform_firewall_reference_count)" -eq 1 ] || return 78
+	[ "$(printf '%s\n' "$platform_firewall_chain_rules" | wc -l)" -eq 3 ] || return 78
+	[ "$(printf '%s\n' "$platform_firewall_chain_rules" | grep -Fc -- "--comment $platform_firewall_marker")" -eq 2 ] || return 78
+	platform_firewall_allow_rule=$(printf '%s\n' "$platform_firewall_chain_rules" | sed -n '2p')
+	platform_firewall_deny_rule=$(printf '%s\n' "$platform_firewall_chain_rules" | sed -n '3p')
+	case $platform_firewall_allow_rule in
+		*"-s $platform_firewall_cidr"*"--comment $platform_firewall_marker"*"-j ACCEPT") ;;
+		*) return 78 ;;
+	esac
+	case $platform_firewall_deny_rule in
+		*"--comment $platform_firewall_marker"*"-j DROP") ;;
+		*) return 78 ;;
+	esac
+	case $platform_firewall_deny_rule in
+		*' -s '*) return 78 ;;
+	esac
+	iptables -C "$platform_firewall_chain" -p tcp -s "$platform_firewall_cidr" \
+		-d "$platform_firewall_address" --dport 3493 -m comment \
+		--comment "$platform_firewall_marker" -j ACCEPT >/dev/null 2>&1 || return 78
+	iptables -C "$platform_firewall_chain" -p tcp -d "$platform_firewall_address" \
+		--dport 3493 -m comment --comment "$platform_firewall_marker" \
+		-j DROP >/dev/null 2>&1 || return 78
+	iptables -C INPUT -p tcp -d "$platform_firewall_address" --dport 3493 \
+		-m comment --comment "$platform_firewall_marker" -j "$platform_firewall_chain" \
+		>/dev/null 2>&1 || return 78
+	platform_firewall_first_input=$(printf '%s\n' "$platform_firewall_input_rules" |
+		awk '$1 == "-A" && $2 == "INPUT" { print; exit }')
+	case $platform_firewall_first_input in
+		*"--comment $platform_firewall_marker"*"-j $platform_firewall_chain"*) ;;
+		*) return 78 ;;
+	esac
+}
+
+platform_firewall_state() {
+	if [ "${NUTMERLIN_ENABLE_TEST_ADAPTERS:-0}" = 1 ]; then
+		platform_firewall_adapter_state "$1" "$2"
+	else
+		platform_firewall_iptables_state "$1" "$2"
+	fi
+}
+
+platform_firewall_delete_expected_rules() {
+	platform_firewall_address=$1
+	platform_firewall_cidr=$2
+	platform_firewall_marker=$3
+	platform_firewall_delete_status=0
+	iptables -D INPUT -p tcp -d "$platform_firewall_address" --dport 3493 \
+		-m comment --comment "$platform_firewall_marker" \
+		-j "$platform_firewall_chain" >/dev/null 2>&1 || platform_firewall_delete_status=75
+	iptables -D "$platform_firewall_chain" -p tcp -s "$platform_firewall_cidr" \
+		-d "$platform_firewall_address" --dport 3493 -m comment \
+		--comment "$platform_firewall_marker" -j ACCEPT \
+		>/dev/null 2>&1 || platform_firewall_delete_status=75
+	iptables -D "$platform_firewall_chain" -p tcp -d "$platform_firewall_address" \
+		--dport 3493 -m comment --comment "$platform_firewall_marker" \
+		-j DROP >/dev/null 2>&1 || platform_firewall_delete_status=75
+	return "$platform_firewall_delete_status"
+}
+
+platform_firewall_ensure() {
+	platform_firewall_address=$1
+	platform_firewall_cidr=$2
+	if platform_firewall_state "$platform_firewall_address" "$platform_firewall_cidr"; then
+		return 0
+	else
+		platform_firewall_observed=$?
+		[ "$platform_firewall_observed" -eq 1 ] || return "$platform_firewall_observed"
+	fi
+	if [ "${NUTMERLIN_ENABLE_TEST_ADAPTERS:-0}" = 1 ]; then
+		platform_firewall_root=$NUTMERLIN_TEST_ROOT/platform
+		[ -d "$platform_firewall_root" ] && [ ! -L "$platform_firewall_root" ] || return 78
+		[ "$(stat -c '%a' "$platform_firewall_root")" = 700 ] || return 78
+		platform_firewall_candidate=$platform_firewall_root/firewall.tsv.new
+		[ ! -e "$platform_firewall_candidate" ] && [ ! -L "$platform_firewall_candidate" ] || return 78
+		(umask 077 && set -C && platform_firewall_expected_record \
+			"$platform_firewall_address" "$platform_firewall_cidr" \
+			>"$platform_firewall_candidate") || {
+			rm -f -- "$platform_firewall_candidate"
+			return 75
+		}
+		if ! ln "$platform_firewall_candidate" "$platform_firewall_root/firewall.tsv" 2>/dev/null; then
+			rm -f -- "$platform_firewall_candidate"
+			return 78
+		fi
+		rm -f -- "$platform_firewall_candidate"
+		platform_firewall_adapter_state "$platform_firewall_address" "$platform_firewall_cidr"
+		return $?
+	fi
+	platform_firewall_marker=$(platform_firewall_marker) || return $?
+	platform_firewall_all_rules=$(iptables -S 2>/dev/null) || return 69
+	if [ "$(printf '%s\n' "$platform_firewall_all_rules" | platform_firewall_reference_count)" -ne 0 ]; then
+		return 78
+	fi
+	iptables -N "$platform_firewall_chain" || return 75
+	platform_firewall_created=1
+	iptables -A "$platform_firewall_chain" -p tcp -s "$platform_firewall_cidr" \
+		-d "$platform_firewall_address" --dport 3493 -m comment \
+		--comment "$platform_firewall_marker" -j ACCEPT || platform_firewall_created=0
+	if [ "$platform_firewall_created" -eq 1 ]; then
+		iptables -A "$platform_firewall_chain" -p tcp -d "$platform_firewall_address" \
+			--dport 3493 -m comment --comment "$platform_firewall_marker" \
+			-j DROP || platform_firewall_created=0
+	fi
+	if [ "$platform_firewall_created" -eq 1 ]; then
+		iptables -I INPUT 1 -p tcp -d "$platform_firewall_address" --dport 3493 \
+			-m comment --comment "$platform_firewall_marker" \
+			-j "$platform_firewall_chain" || platform_firewall_created=0
+	fi
+	if [ "$platform_firewall_created" -ne 1 ]; then
+		platform_firewall_delete_expected_rules "$platform_firewall_address" \
+			"$platform_firewall_cidr" "$platform_firewall_marker" || :
+		iptables -X "$platform_firewall_chain" >/dev/null 2>&1 || :
+		return 75
+	fi
+	if ! platform_firewall_iptables_state "$platform_firewall_address" "$platform_firewall_cidr"; then
+		platform_firewall_delete_expected_rules "$platform_firewall_address" \
+			"$platform_firewall_cidr" "$platform_firewall_marker" || :
+		iptables -X "$platform_firewall_chain" >/dev/null 2>&1 || :
+		return 75
+	fi
+}
+
+platform_firewall_close() {
+	platform_firewall_address=$1
+	platform_firewall_cidr=$2
+	if platform_firewall_state "$platform_firewall_address" "$platform_firewall_cidr"; then
+		:
+	else
+		platform_firewall_observed=$?
+		[ "$platform_firewall_observed" -eq 1 ] && return 0
+		return "$platform_firewall_observed"
+	fi
+	if [ "${NUTMERLIN_ENABLE_TEST_ADAPTERS:-0}" = 1 ]; then
+		rm -f -- "$NUTMERLIN_TEST_ROOT/platform/firewall.tsv"
+		return 0
+	fi
+	platform_firewall_marker=$(platform_firewall_marker) || return $?
+	platform_firewall_delete_expected_rules "$platform_firewall_address" \
+		"$platform_firewall_cidr" "$platform_firewall_marker" || return $?
+	iptables -X "$platform_firewall_chain" || return 75
+	if iptables -S "$platform_firewall_chain" >/dev/null 2>&1; then
+		return 75
+	fi
+}
+
+platform_firewall_is_absent() {
+	if [ "${NUTMERLIN_ENABLE_TEST_ADAPTERS:-0}" = 1 ]; then
+		[ ! -e "$NUTMERLIN_TEST_ROOT/platform/firewall.tsv" ] &&
+			[ ! -L "$NUTMERLIN_TEST_ROOT/platform/firewall.tsv" ]
+		return $?
+	fi
+	command -v iptables >/dev/null 2>&1 || return 69
+	platform_firewall_all_rules=$(iptables -S 2>/dev/null) || return 69
+	! printf '%s\n' "$platform_firewall_all_rules" |
+		grep -Fx -- "-N $platform_firewall_chain" >/dev/null
 }
 
 platform_client_count() {

@@ -47,7 +47,7 @@ status_collect() {
 	STATUS_UPSD=unknown
 	STATUS_UPSC=unavailable
 	STATUS_LISTENER=unknown
-	STATUS_FIREWALL=loopback_only
+	STATUS_FIREWALL=unknown
 	STATUS_CLIENT_COUNT=0
 	STATUS_RECOVERY=$(status_recovery_value)
 	STATUS_FAILED_LAYER=installation
@@ -75,6 +75,8 @@ status_collect() {
 	status_profile_ready=0
 	status_source_result=0
 	status_source_message=
+	status_network_result=0
+	status_network_message=
 	if [ "$STATUS_STORAGE" = available ] && service_resolve_current >/dev/null 2>&1 &&
 		service_load_active_profile >/dev/null 2>&1; then
 		status_profile_ready=1
@@ -99,12 +101,36 @@ status_collect() {
 			status_source_result=$?
 		fi
 	fi
-	if service_listener_is_loopback_only; then
-		STATUS_LISTENER=loopback
+	if [ "$status_profile_ready" -eq 1 ] && [ "$SERVICE_LAN_ADDRESS" != - ]; then
+		if status_network_message=$(service_validate_active_network 2>&1); then
+			status_network_result=0
+		else
+			status_network_result=$?
+		fi
+	fi
+	if [ "$status_profile_ready" -eq 1 ] && service_listener_is_expected; then
+		if [ "$SERVICE_LAN_ADDRESS" = - ]; then
+			STATUS_LISTENER=loopback
+		else
+			STATUS_LISTENER=trusted_lan
+		fi
 	elif service_listener_is_clear; then
 		STATUS_LISTENER=closed
 	else
 		STATUS_LISTENER=ambiguous
+	fi
+	if [ "$status_profile_ready" -eq 1 ] && [ "$SERVICE_LAN_ADDRESS" != - ]; then
+		if platform_firewall_state "$SERVICE_LAN_ADDRESS" "$SERVICE_LAN_CIDR"; then
+			STATUS_FIREWALL=trusted_lan
+		elif platform_firewall_is_absent; then
+			STATUS_FIREWALL=closed
+		else
+			STATUS_FIREWALL=ambiguous
+		fi
+	elif platform_firewall_is_absent; then
+		STATUS_FIREWALL=loopback_only
+	else
+		STATUS_FIREWALL=ambiguous
 	fi
 	if [ "$STATUS_STORAGE" != available ]; then
 		STATUS_FAILED_LAYER=storage
@@ -122,20 +148,29 @@ status_collect() {
 		export service_runtime_root
 		if [ "$status_profile_ready" -eq 1 ] && [ "$STATUS_DRIVER" = running ] &&
 			[ "$STATUS_UPSD" = running ] && entware_check >/dev/null 2>&1 &&
-			[ "$status_source_result" -eq 0 ] && service_query_active; then
+			[ "$status_source_result" -eq 0 ] && [ "$status_network_result" -eq 0 ] &&
+			service_query_active; then
 			STATUS_UPSC=healthy
 		else
 			STATUS_UPSC=unavailable
 		fi
+		status_network_healthy=0
+		case $STATUS_LISTENER:$STATUS_FIREWALL in
+			loopback:loopback_only | trusted_lan:trusted_lan) status_network_healthy=1 ;;
+		esac
 		if [ "$STATUS_ENABLED" = enabled ] && [ "$STATUS_DRIVER" = running ] &&
 			[ "$STATUS_UPSD" = running ] && [ "$STATUS_UPSC" = healthy ] &&
-			[ "$STATUS_LISTENER" = loopback ] && [ "$STATUS_RECOVERY" = ready ]; then
+			[ "$status_network_healthy" -eq 1 ] && [ "$STATUS_RECOVERY" = ready ]; then
 			STATUS_FAILED_LAYER=none
 			STATUS_REMEDIATION=none
 			STATUS_EXIT=0
 			STATUS_STATE=ok
 			STATUS_EXIT_CLASS=success
-			STATUS_MESSAGE="$SERVICE_UPS_NAME service is healthy on loopback"
+			if [ "$SERVICE_LAN_ADDRESS" = - ]; then
+				STATUS_MESSAGE="$SERVICE_UPS_NAME service is healthy on loopback"
+			else
+				STATUS_MESSAGE="$SERVICE_UPS_NAME service is healthy for trusted LAN $SERVICE_LAN_CIDR"
+			fi
 		elif [ "$status_source_result" -ne 0 ]; then
 			STATUS_FAILED_LAYER=source
 			STATUS_REMEDIATION='reconnect the configured UPS or correct its stable identity'
@@ -149,6 +184,40 @@ status_collect() {
 				STATUS_STATE=unavailable
 				STATUS_EXIT_CLASS=unavailable
 			fi
+		elif [ "$status_network_result" -ne 0 ]; then
+			STATUS_FAILED_LAYER=firewall
+			STATUS_REMEDIATION='correct the selected LAN address and trusted source CIDR, then reconcile'
+			STATUS_MESSAGE=${status_network_message:-LAN exposure unavailable: router network state could not be verified}
+			if [ "$status_network_result" -eq 78 ]; then
+				STATUS_EXIT=78
+				STATUS_STATE=refused
+				STATUS_EXIT_CLASS=configuration_refusal
+			else
+				STATUS_EXIT=69
+				STATUS_STATE=unavailable
+				STATUS_EXIT_CLASS=unavailable
+			fi
+		elif [ "$status_profile_ready" -eq 1 ] && [ "$SERVICE_LAN_ADDRESS" != - ] &&
+			{ [ "$STATUS_LISTENER" != trusted_lan ] || [ "$STATUS_FIREWALL" != trusted_lan ]; }; then
+			STATUS_FAILED_LAYER=firewall
+			STATUS_REMEDIATION='disable LAN exposure or correct the attributable listener and firewall state'
+			STATUS_MESSAGE='trusted-LAN listener and firewall state do not agree'
+			if [ "$STATUS_LISTENER" = ambiguous ] || [ "$STATUS_FIREWALL" = ambiguous ]; then
+				STATUS_EXIT=78
+				STATUS_STATE=refused
+				STATUS_EXIT_CLASS=configuration_refusal
+			else
+				STATUS_EXIT=69
+				STATUS_STATE=unavailable
+				STATUS_EXIT_CLASS=unavailable
+			fi
+		elif [ "$STATUS_LISTENER" = ambiguous ] || [ "$STATUS_FIREWALL" = ambiguous ]; then
+			STATUS_FAILED_LAYER=firewall
+			STATUS_REMEDIATION='disable LAN exposure or correct the attributable listener and firewall state'
+			STATUS_EXIT=78
+			STATUS_STATE=refused
+			STATUS_EXIT_CLASS=configuration_refusal
+			STATUS_MESSAGE='trusted-LAN admission state is ambiguous and not healthy'
 		else
 			STATUS_FAILED_LAYER=service
 			STATUS_REMEDIATION='run service start or wait for lifecycle reconciliation'
