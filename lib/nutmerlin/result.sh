@@ -45,6 +45,38 @@ result_emit() {
 	esac
 }
 
+result_emit_client_add() {
+	result_format=$1
+	result_message=$2
+	result_client_id=$3
+	result_username=$4
+	unset result_secret result_value
+	result_secret=$5
+	for result_value in "$result_message" "$result_client_id" "$result_username" "$result_secret"; do
+		result_value_is_safe "$result_value" || return 70
+	done
+	case $result_client_id:$result_secret in
+		????????????????????????????????:????????????????????????????????????????????????) ;;
+		*) return 70 ;;
+	esac
+	case $result_client_id$result_secret in
+		*[!0-9a-f]*) return 70 ;;
+	esac
+	[ "$result_username" = "nm_$result_client_id" ] || return 70
+	case $result_format in
+		human)
+			printf '%s\n' "client.add: ok: $result_message" \
+				"client_id=$result_client_id" "username=$result_username" "secret=$result_secret"
+			;;
+		json)
+			printf '{"schema_version":"nutmerlin.result.v1","command":"client.add","status":"ok","exit_class":"success","message":"%s","details":{"client_id":"%s","username":"%s","secret":"%s"}}\n' \
+				"$(result_json_escape "$result_message")" "$result_client_id" \
+				"$result_username" "$result_secret"
+			;;
+		*) return 70 ;;
+	esac
+}
+
 result_emit_status() {
 	result_command=$1
 	result_format=$2

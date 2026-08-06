@@ -9,9 +9,9 @@ installed_root=
 integration_tab=$(printf '\t')
 
 case $test_scenario in
-	service | rollback | lifecycle) ;;
+	service | rollback | lifecycle | client) ;;
 	*)
-		printf '%s\n' 'usage: run-installed-core.sh service|rollback|lifecycle' >&2
+		printf '%s\n' 'usage: run-installed-core.sh service|rollback|lifecycle|client' >&2
 		exit 64
 		;;
 esac
@@ -47,6 +47,10 @@ resolve_test_binary() {
 }
 
 cleanup_installed_root() {
+	if [ -n "${client_monitor_pid:-}" ] && kill -0 "$client_monitor_pid" 2>/dev/null; then
+		kill "$client_monitor_pid" 2>/dev/null || :
+		wait "$client_monitor_pid" 2>/dev/null || :
+	fi
 	if [ -n "$installed_root" ] && [ -d "$installed_root" ]; then
 		if [ "${NUTMERLIN_TEST_DEBUG:-0}" = 1 ]; then
 			for debug_log in "$installed_root"/tmp/nutmerlin/log/* "$installed_root"/tmp/nutmerlin/run/*.err; do
@@ -87,6 +91,7 @@ dummy_ups_source=$(resolve_test_binary dummy-ups) || exit 69
 upsd_source=$(resolve_test_binary upsd) || exit 69
 upsc_source=$(resolve_test_binary upsc) || exit 69
 usbhid_ups_source=$(resolve_test_binary usbhid-ups) || exit 69
+upsmon_source=$(resolve_test_binary upsmon) || exit 69
 
 if [ -n "${NUTMERLIN_NUT_LIBDIRS:-}" ]; then
 	LD_LIBRARY_PATH=$NUTMERLIN_NUT_LIBDIRS${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
@@ -138,6 +143,54 @@ invoke_hook() {
 		NUTMERLIN_TEST_ROOT="$installed_root" \
 		NUTMERLIN_TEST_RUN_USER="$NUTMERLIN_TEST_RUN_USER" \
 		"$installed_root/jffs/scripts/$1"
+}
+
+write_upsmon_configuration() {
+	client_configuration_root=$1
+	client_username=$2
+	client_password=$3
+	mkdir -p "$client_configuration_root"
+	chmod 700 "${client_configuration_root%/*}" "$client_configuration_root"
+	{
+		printf 'MONITOR dummy@127.0.0.1 1 %s %s secondary\n' \
+			"$client_username" "$client_password"
+		printf '%s\n' \
+			'MINSUPPLIES 1' \
+			'SHUTDOWNCMD "/bin/false"' \
+			"POWERDOWNFLAG $client_configuration_root/powerdown" \
+			'POLLFREQ 1' \
+			'POLLFREQALERT 1' \
+			'HOSTSYNC 15' \
+			'DEADTIME 15' \
+			'FINALDELAY 5'
+	} >"$client_configuration_root/upsmon.conf"
+	chmod 600 "$client_configuration_root/upsmon.conf"
+}
+
+run_upsmon_until() {
+	client_configuration_root=$1
+	client_log=$2
+	client_expected_pattern=$3
+	NUT_CONFPATH=$client_configuration_root
+	export NUT_CONFPATH
+	"$upsmon_source" -D -F -p >"$client_log" 2>&1 &
+	client_monitor_pid=$!
+	client_wait=0
+	while [ "$client_wait" -lt 10 ]; do
+		if grep -F "$client_expected_pattern" "$client_log" >/dev/null 2>&1; then
+			kill "$client_monitor_pid" 2>/dev/null || :
+			wait "$client_monitor_pid" 2>/dev/null || :
+			client_monitor_pid=
+			return 0
+		fi
+		kill -0 "$client_monitor_pid" 2>/dev/null || break
+		client_wait=$((client_wait + 1))
+		sleep 1
+	done
+	kill "$client_monitor_pid" 2>/dev/null || :
+	wait "$client_monitor_pid" 2>/dev/null || :
+	client_monitor_pid=
+	return 1
 }
 
 if [ "$test_scenario" = lifecycle ]; then
@@ -357,6 +410,34 @@ if [ "$test_scenario" = rollback ]; then
 	"$installed_root/opt/bin/upsc" dummy@127.0.0.1 ups.status 2>/dev/null | grep -qx OL
 fi
 
+if [ "$test_scenario" = client ]; then
+	client_result=$installed_root/client-add.json
+	invoke_cli client add integration-secondary --json >"$client_result"
+	client_id=$(jq -r '.details.client_id' "$client_result")
+	client_username=$(jq -r '.details.username' "$client_result")
+	client_secret=$(jq -r '.details.secret' "$client_result")
+	for client_service_record in dummy-ups.pid upsd.pid; do
+		client_service_pid=$(cut -f1 "$installed_root/tmp/nutmerlin/run/$client_service_record")
+		if tr '\000' '\n' <"/proc/$client_service_pid/environ" | grep -F "$client_secret" >/dev/null; then
+			exit 1
+		fi
+	done
+	client_root=$installed_root/secondary-client
+	write_upsmon_configuration "$client_root/correct" "$client_username" "$client_secret"
+	run_upsmon_until "$client_root/correct" "$client_root/correct.log" \
+		"Logged into UPS dummy@127.0.0.1" || exit 1
+
+	wrong_secret=000000000000000000000000000000000000000000000000
+	[ "$wrong_secret" != "$client_secret" ]
+	write_upsmon_configuration "$client_root/wrong" "$client_username" "$wrong_secret"
+	run_upsmon_until "$client_root/wrong" "$client_root/wrong.log" \
+		"Login on UPS [dummy@127.0.0.1] failed - got [ERR ACCESS-DENIED]" || exit 1
+
+	invoke_cli client revoke "$client_id" >"$installed_root/client-revoke.log"
+	run_upsmon_until "$client_root/correct" "$client_root/revoked.log" \
+		"Login on UPS [dummy@127.0.0.1] failed - got [ERR ACCESS-DENIED]" || exit 1
+fi
+
 chmod 500 "$installed_root/opt"
 env NUTMERLIN_ENABLE_TEST_ADAPTERS=1 \
 	NUTMERLIN_TEST_ROOT="$installed_root" \
@@ -371,6 +452,8 @@ if [ "$test_scenario" = rollback ]; then
 	printf '%s\n' 'activation rollback: preserved; retained sets: 2'
 elif [ "$test_scenario" = lifecycle ]; then
 	printf '%s\n' 'Merlin lifecycle: hooks=5 recovery=bounded status=healthy'
+elif [ "$test_scenario" = client ]; then
+	printf '%s\n' 'standard secondary authentication: correct=accepted wrong=rejected revoked=rejected'
 else
 	printf '%s\n' 'installed dummy status: OL'
 fi

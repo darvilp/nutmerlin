@@ -304,6 +304,63 @@ case $command_name in
 		. "$library_dir/result.sh"
 		result_emit lan human ok success "$LAN_MESSAGE"
 		;;
+	client)
+		# POSIX shells preserve an inherited variable's export attribute after
+		# assignment. Scrub every internal secret-bearing name before use.
+		unset CLIENT_SECRET CONFIGURATION_CLIENT_SECRET client_secret unique_secret \
+			client_candidate_secret client_record_secret result_secret result_value
+		[ "$#" -ge 1 ] || usage
+		client_action=$1
+		shift
+		case $client_action in
+			add)
+				case $# in
+					1)
+						client_label=$1
+						client_output_format=human
+						;;
+					2)
+						client_label=$1
+						[ "$2" = --json ] || usage
+						client_output_format=json
+						;;
+					*) usage ;;
+				esac
+				case $client_label in
+					-*) usage ;;
+				esac
+				;;
+			revoke)
+				[ "$#" -eq 1 ] || usage
+				client_id=$1
+				case $client_id in
+					-*) usage ;;
+				esac
+				;;
+			*) usage ;;
+		esac
+		for client_library in paths entware configuration hooks platform ownership service client result; do
+			# shellcheck disable=SC1090
+			. "$library_dir/$client_library.sh"
+		done
+		paths_initialize
+		ownership_verify_installed_state || {
+			printf '%s\n' 'client refused: installed ownership evidence is incomplete' >&2
+			exit 78
+		}
+		case $client_action in
+			add)
+				service_run_locked client_add "$client_label"
+				# shellcheck disable=SC2153 # populated by the sourced client module
+				result_emit_client_add "$client_output_format" "$CLIENT_MESSAGE" \
+					"$CLIENT_ID" "$CLIENT_USERNAME" "$CLIENT_SECRET"
+				;;
+			revoke)
+				service_run_locked client_revoke "$client_id"
+				result_emit client.revoke human ok success "$CLIENT_MESSAGE"
+				;;
+		esac
+		;;
 	hook)
 		[ "$#" -ge 1 ] || usage
 		hook_event=$1

@@ -160,11 +160,165 @@ configuration_network_cidr() {
 	printf '%s/%s\n' "$(configuration_uint_to_ipv4 "$network_start")" "$network_prefix"
 }
 
+configuration_client_id_is_valid() {
+	client_id=$1
+	[ "${#client_id}" -eq 32 ] || return 1
+	case $client_id in
+		*[!0-9a-f]*) return 1 ;;
+	esac
+}
+
+configuration_client_label_is_valid() {
+	client_label=$1
+	[ -n "$client_label" ] && [ "${#client_label}" -le 64 ] || return 1
+	case $client_label in
+		' '* | *' ' | *[!A-Za-z0-9._+\ -]*) return 1 ;;
+	esac
+}
+
+configuration_client_secret_is_valid() {
+	unset client_secret
+	client_secret=$1
+	[ "${#client_secret}" -eq 48 ] || return 1
+	case $client_secret in
+		*[!0-9a-f]*) return 1 ;;
+	esac
+}
+
+configuration_read_client() {
+	client_path=$1
+	expected_client_id=$2
+	[ -f "$client_path" ] && [ ! -L "$client_path" ] || return 1
+	[ "$(stat -c '%a' "$client_path")" = 600 ] || return 1
+	[ "$(stat -c '%h' "$client_path")" = 1 ] || return 1
+	[ "$(stat -c '%u' "$client_path")" = "$(id -u)" ] || return 1
+	[ "$(wc -l <"$client_path")" -eq 5 ] || return 1
+	[ "$(configuration_model_value "$client_path" 1 schema)" = nutmerlin.client.v1 ] || return 1
+	CONFIGURATION_CLIENT_ID=$(configuration_model_value "$client_path" 2 client_id) || return 1
+	CONFIGURATION_CLIENT_LABEL=$(configuration_model_value "$client_path" 3 label) || return 1
+	CONFIGURATION_CLIENT_USERNAME=$(configuration_model_value "$client_path" 4 username) || return 1
+	unset CONFIGURATION_CLIENT_SECRET
+	CONFIGURATION_CLIENT_SECRET=$(configuration_model_value "$client_path" 5 secret) || return 1
+	[ "$CONFIGURATION_CLIENT_ID" = "$expected_client_id" ] || return 1
+	configuration_client_id_is_valid "$CONFIGURATION_CLIENT_ID" || return 1
+	configuration_client_label_is_valid "$CONFIGURATION_CLIENT_LABEL" || return 1
+	[ "$CONFIGURATION_CLIENT_USERNAME" = "nm_$CONFIGURATION_CLIENT_ID" ] || return 1
+	configuration_client_secret_is_valid "$CONFIGURATION_CLIENT_SECRET" || return 1
+}
+
+configuration_validate_clients() {
+	client_set_root=$1
+	client_records_root=$client_set_root/clients
+	if [ ! -e "$client_records_root" ] && [ ! -L "$client_records_root" ]; then
+		return 0
+	fi
+	[ -d "$client_records_root" ] && [ ! -L "$client_records_root" ] || return 1
+	[ "$(stat -c '%a' "$client_records_root")" = 700 ] || return 1
+	[ "$(stat -c '%u' "$client_records_root")" = "$(id -u)" ] || return 1
+	for hidden_client_path in "$client_records_root"/.[!.]* "$client_records_root"/..?*; do
+		if [ -e "$hidden_client_path" ] || [ -L "$hidden_client_path" ]; then
+			return 1
+		fi
+	done
+	client_record_count=$(find "$client_records_root" -mindepth 1 -maxdepth 1 | wc -l)
+	[ "$client_record_count" -ge 1 ] && [ "$client_record_count" -le 64 ] || return 1
+	for client_record_path in "$client_records_root"/*; do
+		client_record_id=${client_record_path##*/}
+		configuration_client_id_is_valid "$client_record_id" || return 1
+		configuration_read_client "$client_record_path" "$client_record_id" || return 1
+	done
+}
+
+configuration_write_client_record() {
+	client_record_root=$1
+	client_record_id=$2
+	client_record_label=$3
+	client_record_username=$4
+	unset client_record_secret
+	client_record_secret=$5
+	configuration_client_id_is_valid "$client_record_id" || return 78
+	configuration_client_label_is_valid "$client_record_label" || return 78
+	[ "$client_record_username" = "nm_$client_record_id" ] || return 78
+	configuration_client_secret_is_valid "$client_record_secret" || return 78
+	client_record_path=$client_record_root/$client_record_id
+	[ ! -e "$client_record_path" ] && [ ! -L "$client_record_path" ] || return 78
+	(umask 077 && printf 'schema\tnutmerlin.client.v1\nclient_id\t%s\nlabel\t%s\nusername\t%s\nsecret\t%s\n' \
+		"$client_record_id" "$client_record_label" "$client_record_username" \
+		"$client_record_secret" >"$client_record_path")
+	chmod 600 "$client_record_path"
+}
+
+configuration_render_clients() {
+	client_candidate_root=$1
+	client_source_root=${2:-}
+	: >"$client_candidate_root/upsd.users"
+	if [ -z "$client_source_root" ] ||
+		{ [ ! -e "$client_source_root/clients" ] && [ ! -L "$client_source_root/clients" ]; }; then
+		return 0
+	fi
+	configuration_validate_clients "$client_source_root" || return 78
+	mkdir -m 700 "$client_candidate_root/clients"
+	client_separator=
+	for client_source_path in "$client_source_root"/clients/*; do
+		client_source_id=${client_source_path##*/}
+		configuration_read_client "$client_source_path" "$client_source_id" || return 78
+		configuration_write_client_record "$client_candidate_root/clients" \
+			"$CONFIGURATION_CLIENT_ID" "$CONFIGURATION_CLIENT_LABEL" \
+			"$CONFIGURATION_CLIENT_USERNAME" "$CONFIGURATION_CLIENT_SECRET" || return $?
+		{
+			[ -z "$client_separator" ] || printf '\n'
+			printf '[%s]\npassword = %s\nupsmon secondary\n' \
+				"$CONFIGURATION_CLIENT_USERNAME" "$CONFIGURATION_CLIENT_SECRET"
+		} >>"$client_candidate_root/upsd.users"
+		client_separator=1
+	done
+}
+
+configuration_render_upsd_users() {
+	client_set_root=$1
+	: >"$client_set_root/upsd.users"
+	if [ ! -e "$client_set_root/clients" ] && [ ! -L "$client_set_root/clients" ]; then
+		return 0
+	fi
+	configuration_validate_clients "$client_set_root" || return 78
+	client_separator=
+	for client_record_path in "$client_set_root"/clients/*; do
+		client_record_id=${client_record_path##*/}
+		configuration_read_client "$client_record_path" "$client_record_id" || return 78
+		{
+			[ -z "$client_separator" ] || printf '\n'
+			printf '[%s]\npassword = %s\nupsmon secondary\n' \
+				"$CONFIGURATION_CLIENT_USERNAME" "$CONFIGURATION_CLIENT_SECRET"
+		} >>"$client_set_root/upsd.users"
+		client_separator=1
+	done
+}
+
+configuration_write_manifest() {
+	manifest_set_root=$1
+	configuration_validate_clients "$manifest_set_root" || return 78
+	(
+		cd "$manifest_set_root" || exit
+		LC_ALL=C
+		export LC_ALL
+		{
+			sha256sum model.tsv ups.conf upsd.conf upsd.users
+			if [ -d clients ] && [ ! -L clients ]; then
+				for manifest_client_path in clients/*; do
+					sha256sum "$manifest_client_path"
+				done
+			fi
+		} >SHA256SUMS
+	)
+	chmod 600 "$manifest_set_root/SHA256SUMS"
+}
+
 configuration_render_dummy() {
 	candidate_root=$1
 	set_id=$2
 	code_root=$3
 	runtime_root=$4
+	client_source_root=${5:-}
 
 	printf 'schema\tnutmerlin.model.v1\nsource\tdummy\nset_id\t%s\n' "$set_id" >"$candidate_root/model.tsv"
 	{
@@ -178,14 +332,10 @@ configuration_render_dummy() {
 		printf 'STATEPATH %s/state\n' "$runtime_root"
 		printf '%s\n' 'LISTEN 127.0.0.1 3493'
 	} >"$candidate_root/upsd.conf"
-	: >"$candidate_root/upsd.users"
+	configuration_render_clients "$candidate_root" "$client_source_root"
 	chmod 600 "$candidate_root/model.tsv" "$candidate_root/ups.conf" \
 		"$candidate_root/upsd.conf" "$candidate_root/upsd.users"
-	(
-		cd "$candidate_root" || exit
-		sha256sum model.tsv ups.conf upsd.conf upsd.users >SHA256SUMS
-	)
-	chmod 600 "$candidate_root/SHA256SUMS"
+	configuration_write_manifest "$candidate_root"
 }
 
 configuration_render_usbhid() {
@@ -198,6 +348,7 @@ configuration_render_usbhid() {
 	identity_value=$7
 	lan_address=${8:--}
 	lan_cidr=${9:--}
+	client_source_root=${10:-}
 
 	printf 'schema\tnutmerlin.model.v1\nsource\tups\nset_id\t%s\nvendor_id\t%s\nproduct_id\t%s\nidentity\t%s\nidentity_value\t%s\n' \
 		"$set_id" "$vendor_id" "$product_id" "$identity_kind" "$identity_value" \
@@ -227,14 +378,10 @@ configuration_render_usbhid() {
 		printf '%s\n' 'LISTEN 127.0.0.1 3493'
 		[ "$lan_address" = - ] || printf 'LISTEN %s 3493\n' "$lan_address"
 	} >"$candidate_root/upsd.conf"
-	: >"$candidate_root/upsd.users"
+	configuration_render_clients "$candidate_root" "$client_source_root"
 	chmod 600 "$candidate_root/model.tsv" "$candidate_root/ups.conf" \
 		"$candidate_root/upsd.conf" "$candidate_root/upsd.users"
-	(
-		cd "$candidate_root" || exit
-		sha256sum model.tsv ups.conf upsd.conf upsd.users >SHA256SUMS
-	)
-	chmod 600 "$candidate_root/SHA256SUMS"
+	configuration_write_manifest "$candidate_root"
 }
 
 configuration_model_value() {
@@ -316,13 +463,18 @@ configuration_validate_set() {
 	[ -d "$validated_set_root" ] && [ ! -L "$validated_set_root" ] || return 1
 	[ "$(stat -c '%a' "$validated_set_root")" = 700 ] || return 1
 	[ "$(stat -c '%u' "$validated_set_root")" = "$validated_set_uid" ] || return 1
-	[ "$(find "$validated_set_root" -mindepth 1 -maxdepth 1 | wc -l)" -eq 5 ] || return 1
+	validated_entry_count=5
+	if [ -e "$validated_set_root/clients" ] || [ -L "$validated_set_root/clients" ]; then
+		validated_entry_count=6
+	fi
+	[ "$(find "$validated_set_root" -mindepth 1 -maxdepth 1 | wc -l)" -eq "$validated_entry_count" ] || return 1
 	for set_file in model.tsv ups.conf upsd.conf upsd.users SHA256SUMS; do
 		[ -f "$validated_set_root/$set_file" ] && [ ! -L "$validated_set_root/$set_file" ] || return 1
 		[ "$(stat -c '%a' "$validated_set_root/$set_file")" = 600 ] || return 1
 		[ "$(stat -c '%h' "$validated_set_root/$set_file")" = 1 ] || return 1
 		[ "$(stat -c '%u' "$validated_set_root/$set_file")" = "$validated_set_uid" ] || return 1
 	done
+	configuration_validate_clients "$validated_set_root" || return 1
 	validated_set_id=${validated_set_root##*/}
 	case $validated_set_id in
 		.candidate-*) validated_set_id=${validated_set_id#.candidate-} ;;
@@ -349,17 +501,23 @@ configuration_validate_set() {
 		case $validated_source in
 			dummy)
 				configuration_render_dummy "$validation_scratch" "$validated_set_id" \
-					"$NUTMERLIN_JFFS_ROOT/addons/nutmerlin" "$NUTMERLIN_TMP_ROOT/nutmerlin"
+					"$NUTMERLIN_JFFS_ROOT/addons/nutmerlin" "$NUTMERLIN_TMP_ROOT/nutmerlin" \
+					"$validated_set_root"
 				;;
 			ups)
 				configuration_render_usbhid "$validation_scratch" "$validated_set_id" \
 					"$NUTMERLIN_TMP_ROOT/nutmerlin" "$validated_vendor_id" "$validated_product_id" \
 					"$validated_identity_kind" "$validated_identity_value" \
-					"$validated_lan_address" "$validated_lan_cidr"
+					"$validated_lan_address" "$validated_lan_cidr" "$validated_set_root"
 				;;
 			*) exit 1 ;;
 		esac
-		for validated_file in model.tsv ups.conf upsd.conf upsd.users SHA256SUMS; do
+		for validated_file in model.tsv ups.conf upsd.conf upsd.users SHA256SUMS \
+			"$validation_scratch"/clients/*; do
+			case $validated_file in
+				"$validation_scratch"/*) validated_file=${validated_file#"$validation_scratch"/} ;;
+			esac
+			[ -f "$validation_scratch/$validated_file" ] || continue
 			cmp -s "$validation_scratch/$validated_file" "$validated_set_root/$validated_file" || exit 1
 		done
 	)
@@ -598,54 +756,71 @@ configuration_finalize_real_over_dummy() {
 	fi
 }
 
-configuration_activate_profile() {
-	activation_profile=$1
-	activation_vendor_id=${2:-}
-	activation_product_id=${3:-}
-	activation_identity_kind=${4:-}
-	activation_identity_value=${5:-}
-	activation_lan_address=${6:--}
-	activation_lan_cidr=${7:--}
-	activation_fallback=allow
+configuration_clients_are_preserved() {
+	preserved_previous_root=$1
+	preserved_candidate_root=$2
+	configuration_validate_clients "$preserved_previous_root" || return 1
+	configuration_validate_clients "$preserved_candidate_root" || return 1
+	if [ ! -d "$preserved_previous_root/clients" ]; then
+		return 0
+	fi
+	[ -d "$preserved_candidate_root/clients" ] || return 1
+	for preserved_client_path in "$preserved_previous_root"/clients/*; do
+		preserved_client_id=${preserved_client_path##*/}
+		cmp -s "$preserved_client_path" \
+			"$preserved_candidate_root/clients/$preserved_client_id" || return 1
+	done
+}
+
+configuration_activation_restriction() {
+	restriction_previous_root=$1
+	restriction_candidate_root=$2
+	restriction_previous_id=${restriction_previous_root##*/}
+	restriction_candidate_id=${restriction_candidate_root##*/}
+	restriction_candidate_id=${restriction_candidate_id#.candidate-}
+	configuration_read_model "$restriction_previous_root" "$restriction_previous_id" || return 78
+	restriction_previous_lan_address=$CONFIGURATION_LAN_ADDRESS
+	restriction_previous_lan_cidr=$CONFIGURATION_LAN_CIDR
+	configuration_read_model "$restriction_candidate_root" "$restriction_candidate_id" || return 78
+	restriction_candidate_lan_address=$CONFIGURATION_LAN_ADDRESS
+	restriction_candidate_lan_cidr=$CONFIGURATION_LAN_CIDR
+	restriction_lan=0
+	restriction_clients=0
+	if [ "$restriction_previous_lan_address" != - ] &&
+		{ [ "$restriction_candidate_lan_address" = - ] ||
+			[ "$restriction_candidate_lan_address" != "$restriction_previous_lan_address" ] ||
+			[ "$restriction_candidate_lan_cidr" != "$restriction_previous_lan_cidr" ]; }; then
+		restriction_lan=1
+	fi
+	configuration_clients_are_preserved "$restriction_previous_root" \
+		"$restriction_candidate_root" || restriction_clients=1
+	case $restriction_lan:$restriction_clients in
+		0:0) printf '%s\n' none ;;
+		1:0) printf '%s\n' lan ;;
+		0:1) printf '%s\n' credential ;;
+		1:1) printf '%s\n' restricted ;;
+	esac
+}
+
+configuration_activate_candidate() {
+	activation_candidate_root=$1
+	activation_new_id=$2
 	activation_config_root=$NUTMERLIN_OPT_ROOT/etc/nutmerlin/config
 	activation_sets_root=$activation_config_root/sets
 	activation_code_root=$NUTMERLIN_JFFS_ROOT/addons/nutmerlin
-	activation_runtime_root=$NUTMERLIN_TMP_ROOT/nutmerlin
 	activation_previous_id=$(cat "$activation_config_root/current")
 	configuration_read_model "$activation_sets_root/$activation_previous_id" \
 		"$activation_previous_id" || return 78
 	activation_previous_source=$CONFIGURATION_SOURCE
-	activation_previous_lan_address=$CONFIGURATION_LAN_ADDRESS
-	activation_previous_lan_cidr=$CONFIGURATION_LAN_CIDR
-	if [ "$activation_previous_lan_address" != - ]; then
-		if [ "$activation_lan_address" = - ] ||
-			[ "$activation_lan_address" != "$activation_previous_lan_address" ] ||
-			[ "$activation_lan_cidr" != "$activation_previous_lan_cidr" ]; then
-			activation_fallback=discard
-		fi
-	fi
+	configuration_read_model "$activation_candidate_root" "$activation_new_id" || return 78
+	activation_profile=$CONFIGURATION_SOURCE
+	activation_restriction=$(configuration_activation_restriction \
+		"$activation_sets_root/$activation_previous_id" "$activation_candidate_root") || return $?
 	activation_old_last_good=
 	if [ -f "$activation_config_root/last-good" ]; then
 		activation_old_last_good=$(cat "$activation_config_root/last-good")
 	fi
-	activation_new_id=$(configuration_random_id)
-	activation_candidate_root=$activation_sets_root/.candidate-$activation_new_id
 	activation_new_root=$activation_sets_root/$activation_new_id
-
-	mkdir -m 700 "$activation_candidate_root"
-	case $activation_profile in
-		dummy)
-			configuration_render_dummy "$activation_candidate_root" "$activation_new_id" \
-				"$activation_code_root" "$activation_runtime_root"
-			;;
-		ups)
-			configuration_render_usbhid "$activation_candidate_root" "$activation_new_id" \
-				"$activation_runtime_root" "$activation_vendor_id" "$activation_product_id" \
-				"$activation_identity_kind" "$activation_identity_value" \
-				"$activation_lan_address" "$activation_lan_cidr"
-			;;
-		*) return 78 ;;
-	esac
 	configuration_validate_set "$activation_candidate_root" || {
 		rm -rf -- "$activation_candidate_root"
 		return 70
@@ -672,15 +847,19 @@ configuration_activate_profile() {
 	if [ "$activation_enabled" = 1 ]; then
 		if ! service_start; then
 			unset NUTMERLIN_TEST_ACTIVATION_FAIL
-			if [ "$activation_fallback" = discard ]; then
+			if [ "$activation_restriction" != none ]; then
 				configuration_remove_selector "$activation_config_root" last-good || return $?
 				configuration_remove_set "$activation_sets_root" "$activation_previous_id" || return $?
 				if [ -n "$activation_old_last_good" ] &&
 					[ "$activation_old_last_good" != "$activation_previous_id" ]; then
 					configuration_remove_set "$activation_sets_root" "$activation_old_last_good" || return $?
 				fi
-				printf '%s\n' \
-					'configuration activation failed: safer LAN selection remains active and stopped' >&2
+				case $activation_restriction in
+					lan) activation_failure_message='safer LAN selection remains active and stopped' ;;
+					credential) activation_failure_message='revoked credential remains absent and service is stopped' ;;
+					*) activation_failure_message='safer restricted selection remains active and stopped' ;;
+				esac
+				printf 'configuration activation failed: %s\n' "$activation_failure_message" >&2
 				return 75
 			fi
 			if [ "$activation_profile" = ups ] && [ "$activation_previous_source" = dummy ]; then
@@ -706,7 +885,7 @@ configuration_activate_profile() {
 		fi
 	fi
 
-	if [ "$activation_fallback" = discard ]; then
+	if [ "$activation_restriction" != none ]; then
 		configuration_remove_selector "$activation_config_root" last-good || return $?
 		configuration_remove_set "$activation_sets_root" "$activation_previous_id" || return $?
 		if [ -n "$activation_old_last_good" ] &&
@@ -745,7 +924,80 @@ configuration_activate_profile() {
 			return 75
 		}
 	fi
-	case $activation_profile:$activation_enabled in
+	CONFIGURATION_ACTIVATION_ENABLED=$activation_enabled
+	export CONFIGURATION_ACTIVATION_ENABLED
+}
+
+configuration_render_current_profile() {
+	current_candidate_root=$1
+	current_candidate_id=$2
+	current_source_root=$3
+	current_source_id=${current_source_root##*/}
+	configuration_read_model "$current_source_root" "$current_source_id" || return 78
+	current_profile=$CONFIGURATION_SOURCE
+	current_vendor_id=$CONFIGURATION_VENDOR_ID
+	current_product_id=$CONFIGURATION_PRODUCT_ID
+	current_identity_kind=$CONFIGURATION_IDENTITY_KIND
+	current_identity_value=$CONFIGURATION_IDENTITY_VALUE
+	current_lan_address=$CONFIGURATION_LAN_ADDRESS
+	current_lan_cidr=$CONFIGURATION_LAN_CIDR
+	case $current_profile in
+		dummy)
+			configuration_render_dummy "$current_candidate_root" "$current_candidate_id" \
+				"$NUTMERLIN_JFFS_ROOT/addons/nutmerlin" "$NUTMERLIN_TMP_ROOT/nutmerlin" \
+				"$current_source_root"
+			;;
+		ups)
+			configuration_render_usbhid "$current_candidate_root" "$current_candidate_id" \
+				"$NUTMERLIN_TMP_ROOT/nutmerlin" "$current_vendor_id" "$current_product_id" \
+				"$current_identity_kind" "$current_identity_value" \
+				"$current_lan_address" "$current_lan_cidr" "$current_source_root"
+			;;
+		*) return 78 ;;
+	esac
+}
+
+configuration_activate_profile() {
+	activation_profile=$1
+	activation_vendor_id=${2:-}
+	activation_product_id=${3:-}
+	activation_identity_kind=${4:-}
+	activation_identity_value=${5:-}
+	activation_lan_address=${6:--}
+	activation_lan_cidr=${7:--}
+	activation_config_root=$NUTMERLIN_OPT_ROOT/etc/nutmerlin/config
+	activation_sets_root=$activation_config_root/sets
+	activation_code_root=$NUTMERLIN_JFFS_ROOT/addons/nutmerlin
+	activation_runtime_root=$NUTMERLIN_TMP_ROOT/nutmerlin
+	activation_previous_id=$(cat "$activation_config_root/current")
+	activation_previous_root=$activation_sets_root/$activation_previous_id
+	activation_new_id=$(configuration_random_id)
+	activation_candidate_root=$activation_sets_root/.candidate-$activation_new_id
+	mkdir -m 700 "$activation_candidate_root"
+	case $activation_profile in
+		dummy)
+			configuration_render_dummy "$activation_candidate_root" "$activation_new_id" \
+				"$activation_code_root" "$activation_runtime_root" "$activation_previous_root" || {
+				rm -rf -- "$activation_candidate_root"
+				return 70
+			}
+			;;
+		ups)
+			configuration_render_usbhid "$activation_candidate_root" "$activation_new_id" \
+				"$activation_runtime_root" "$activation_vendor_id" "$activation_product_id" \
+				"$activation_identity_kind" "$activation_identity_value" \
+				"$activation_lan_address" "$activation_lan_cidr" "$activation_previous_root" || {
+				rm -rf -- "$activation_candidate_root"
+				return 70
+			}
+			;;
+		*)
+			rm -rf -- "$activation_candidate_root"
+			return 78
+			;;
+	esac
+	configuration_activate_candidate "$activation_candidate_root" "$activation_new_id" || return $?
+	case $activation_profile:$CONFIGURATION_ACTIVATION_ENABLED in
 		dummy:1) SOURCE_MESSAGE='dummy configuration activated on loopback' ;;
 		dummy:*) SOURCE_MESSAGE='dummy source selected while service is disabled' ;;
 		ups:1) SOURCE_MESSAGE="usbhid source activated on loopback; identity=$activation_identity_kind" ;;

@@ -127,6 +127,7 @@ bin/
 bin/nutmerlin
 lib/
 lib/nutmerlin/
+lib/nutmerlin/client.sh
 lib/nutmerlin/configuration.sh
 lib/nutmerlin/entware.sh
 lib/nutmerlin/hooks.sh
