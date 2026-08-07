@@ -18,8 +18,12 @@ The first complete tracer shall prove installation, dummy NUT operation, lifecyc
 ## 3. Entware and ownership
 
 - Installation shall require a preexisting healthy Entware installation.
-- NUTMerlin shall check required package and binary compatibility without installing, upgrading, repairing, or removing Entware packages.
-- Missing dependencies shall produce exact administrator guidance.
+- NUTMerlin shall check required package and binary compatibility before installing its own artifacts.
+- Interactive installation shall offer a targeted refresh of exactly `nut`, `nut-common`, `nut-server`, `nut-upsc`, `nut-driver-dummy-ups`, and `nut-driver-usbhid-ups`, default to no, and proceed only after affirmative confirmation. Noninteractive authorization shall require `--install-dependencies`.
+- An authorized refresh shall run `/opt/bin/opkg update`, then one `opkg install` naming all six roots, and allow only normal dependency resolution for those roots. It shall re-probe package metadata, architecture, binaries, options, and the unprivileged NUT identity afterward.
+- Declining with a compatible package set shall proceed without package mutation. Declining with a missing or incompatible requirement shall stop with exact administrator guidance.
+- An existing owned service and trusted-LAN admission shall be stopped before package mutation. Package or post-refresh compatibility failure shall leave NUTMerlin disabled and stopped.
+- NUTMerlin shall not install or repair Entware itself, change feeds, invoke a blanket package upgrade, downgrade or remove packages, or install unrelated optional roots.
 - Foreign or ambiguously owned NUT files, configuration, processes, listeners, hooks, or ownership evidence shall cause read-only refusal before mutation.
 - An installation ID and owned-file metadata shall cover every NUTMerlin code root, hook block, configuration root, scheduled job, and firewall object.
 - Repair and uninstall shall modify only attributable artifacts. Normal uninstall shall remove no Entware package.

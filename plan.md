@@ -16,7 +16,7 @@ The client owns its local shutdown. The router remains monitoring-only and provi
 GitHub native dependencies are the blocking authority. Issue #2 remains the open umbrella and is not a blocking dependency.
 
 ```text
-#14 -> #12 -> #15 -> #17 -> #16 -> #18 -> #23 -> #21 -> #37 -> #38
+#14 -> #12 -> #15 -> #17 -> #16 -> #18 -> #51 -> #23 -> #21 -> menu -> #37 -> #38
 ```
 
 ### #14 — Real dummy NUT vertical slice
@@ -25,7 +25,7 @@ Prove installed host `dummy-ups -> upsd -> upsc` in an isolated root. This ticke
 
 ### #12 — Owned install and configuration
 
-Install the attributable core, perform read-only Entware compatibility checks, refuse foreign state, render one complete dummy configuration, and prove current/LKG activation.
+Install the attributable core, perform read-only Entware and foreign-state checks, render one complete dummy configuration, and prove current/LKG activation.
 
 ### #15 — Merlin lifecycle and CLI
 
@@ -43,13 +43,21 @@ Configure and verify one exact IPv4 listener and one exact source CIDR through a
 
 Generate unique `upsmon secondary` credentials, prove standard-client authentication, and support revocation without secret recovery or rollback resurrection.
 
+### #51 — Targeted Entware NUT package refresh
+
+After read-only ownership and Entware checks, offer a default-No refresh of exactly the six required NUT roots. Support the explicit noninteractive flag, stop owned live surfaces before mutation, re-probe compatibility, and fail stopped without general Entware management.
+
 ### #23 — Disable, repair, uninstall
 
 Close live surfaces, restore only attributable artifacts, and remove owned code/configuration/credentials/hooks/jobs/firewall state while retaining Entware packages.
 
 ### #21 — Package and update
 
-Build a deterministic core archive and implement local user-initiated update with one immediate backup and smoke recovery.
+Build a deterministic core archive and implement fetched, user-initiated update with one immediate backup and smoke recovery.
+
+### Menu — Interactive AMTM-style management
+
+Add the conventional local menu for install/status/source/LAN/client/service/update/removal workflows. Assign its issue number and native dependency after #21; AMTM catalog submission remains outside v0.1.
 
 ### #37 — Exact hardware evidence
 

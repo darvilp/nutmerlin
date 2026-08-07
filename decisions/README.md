@@ -17,7 +17,7 @@ This is the sole ADR authority index for v0.1. An ADR binds v0.1 only when liste
 - [ADR 0055: Use permissioned secret files without secret backup](0055-use-permissioned-secret-files-without-a-secret-backup.md)
 - [ADR 0058: Require a unique stable USB source identity](0058-require-a-unique-stable-usb-source-identity.md)
 - [ADR 0059: Gate external NUT access on verified firewall scope](0059-gate-external-nut-access-on-verified-firewall-scope.md)
-- [ADR 0083: Require a preexisting healthy Entware installation](0083-require-a-preexisting-healthy-entware-installation.md)
+- [ADR 0083: Require healthy Entware and confirm a bounded NUT package refresh](0083-require-a-preexisting-healthy-entware-installation.md)
 - [ADR 0098: Reset v0.1 to a client-local NUT server tracer](0098-reset-v01-to-client-local-nut-server.md)
 
 ## Superseded

@@ -56,7 +56,7 @@ Credential revocation is a security-reducing configuration change and cannot be 
 
 ## 7. Package and update safety
 
-NUTMerlin never bootstraps, repairs, upgrades, or removes Entware. Package inspection is read-only and missing packages require administrator action.
+NUTMerlin never bootstraps or repairs Entware, changes feeds, invokes a blanket package upgrade, downgrades/removes packages, or installs optional roots. Before any package mutation it verifies ownership, foreign-NUT state, storage, package-manager health, and the current six-root compatibility result. Interactive refresh defaults to no; noninteractive authorization requires `--install-dependencies`. Authorization permits only `/opt/bin/opkg update` and one targeted install of all six roots with normal dependency resolution. Existing owned service/recovery/network surfaces close first. Mutation or post-check failure remains disabled and stopped; compatible decline proceeds without `opkg`, while missing/incompatible decline stops.
 
 Update accepts only a local archive with a required adjacent `<archive>.sha256` sidecar and an internal allowlisted per-file checksum manifest. It verifies the archive digest, safe paths/types, inventory, file digests, and compatibility before replacing code. v0.1 checks transport integrity but does not claim an independent publisher-authentication root. There is no network downloader or stream-to-shell path.
 

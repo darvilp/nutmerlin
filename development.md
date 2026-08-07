@@ -49,7 +49,7 @@ NUTMerlin treats Entware as shared and preexisting. It checks these NUT roots an
 - `nut-driver-dummy-ups`
 - `nut-driver-usbhid-ups`
 
-The product does not lock the transitive feed, invoke package mutation, or claim compatibility solely from version strings. A missing requirement produces an exact command suggestion for the administrator to review and run separately.
+The product does not lock the transitive feed or claim compatibility solely from version strings. Interactive installation offers a refresh of all six roots and defaults to no. Acceptance runs `opkg update` and one targeted install of those roots; normal dependency resolution is allowed. Noninteractive authorization requires `--install-dependencies`. Compatible decline proceeds without `opkg`; missing/incompatible decline stops with exact guidance. The installer prints bounded pre/post package evidence but stores no operational package history. NUTMerlin never installs or repairs Entware itself, changes feeds, invokes a blanket package upgrade, downgrades/removes packages, or installs optional roots.
 
 No router runtime dependency may be added without an accepted decision.
 
@@ -73,7 +73,13 @@ For the production-reference router, copy the archive through an existing admini
 NUTMERLIN_ALLOW_PRODUCTION_ROUTER=1 ./install.sh
 ```
 
-The installer never downloads code or changes Entware packages. Preserve a separate router recovery path and inspect all proposed hook/firewall changes before the first test.
+The default-No prompt is the normal package choice. For an explicitly noninteractive targeted NUT refresh, use:
+
+```sh
+NUTMERLIN_ALLOW_PRODUCTION_ROUTER=1 ./install.sh --install-dependencies
+```
+
+The installer never downloads NUTMerlin code or installs Entware itself. Preserve a separate router recovery path and inspect all proposed package, hook, and firewall changes before the first test.
 
 ## 8. Hardware progression
 

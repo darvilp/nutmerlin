@@ -13,7 +13,7 @@ The router reports UPS state and manages the NUT service. It does not centrally 
 
 ## v0.1 capabilities
 
-- Uses a preexisting healthy Entware installation.
+- Uses a preexisting healthy Entware installation and can explicitly install or refresh only its six required NUT package roots.
 - Runs real `dummy-ups`, `upsd`, and `upsc` for development and diagnostics.
 - Supports one loopback-only dummy profile and one uniquely identified `usbhid-ups` profile.
 - Installs only attributable NUTMerlin files and refuses foreign NUT deployments.
@@ -30,7 +30,7 @@ v0.1 has no router-side outage policy, remote shutdown executor, action journal,
 
 ## Current status
 
-The owned dummy core, Merlin lifecycle slice, and closed uniquely identified USB-source profile are implemented. Isolated install, real `dummy-ups`/`upsd`/`upsc`, five managed hooks, bounded recovery, local status/diagnostics, and host USB identity fixtures are covered by tests. Trusted-LAN exposure, client credentials, conservative removal, and exact router/UPS evidence remain on the v0.1 track in `plan.md`. No physical-UPS claim has yet been made. This repository is development software and not a published release.
+The owned dummy core, Merlin lifecycle, uniquely identified USB source, exact trusted-LAN exposure, and restricted secondary-client credentials are implemented and covered by host-safe tests. Conservative removal, fetched user-initiated update, the interactive menu, and exact router/UPS evidence remain on the v0.1 track in `plan.md`. No physical-UPS claim has yet been made. This repository is development software and not a published release.
 
 ## Development
 
@@ -47,7 +47,7 @@ See `development.md` and `testing.md`. Real-router modification is always manual
 
 ## Safety boundary
 
-NUTMerlin never bootstraps or repairs Entware, never adopts a foreign NUT deployment, never binds NUT to WAN or wildcard addresses, never automatically replaces a failed physical source with simulation, and registers no writable UPS or output command.
+NUTMerlin never bootstraps or repairs Entware, changes feeds, runs a blanket package upgrade, downgrades/removes packages, adopts a foreign NUT deployment, binds NUT to WAN or wildcard addresses, automatically replaces a failed physical source with simulation, or registers a writable UPS/output command. Its only package mutation is an explicitly authorized targeted refresh of the six required NUT roots.
 
 ## Documentation authority
 
