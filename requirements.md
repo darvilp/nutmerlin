@@ -64,6 +64,7 @@ The first complete tracer shall prove installation, dummy NUT operation, lifecyc
 - The stable CLI surface shall be:
 
 ```text
+nutmerlin menu
 nutmerlin status [--json]
 nutmerlin diagnostics [--json]
 nutmerlin service start|stop|restart
@@ -74,6 +75,7 @@ nutmerlin lan configure --address IPv4 --cidr CIDR
 nutmerlin lan disable
 nutmerlin client add NAME [--json]
 nutmerlin client revoke CLIENT_ID
+nutmerlin dependencies refresh
 nutmerlin enable
 nutmerlin disable
 nutmerlin repair
@@ -81,6 +83,8 @@ nutmerlin update ARCHIVE
 nutmerlin uninstall
 ```
 
+- `nutmerlin menu` shall require a local interactive terminal and offer only fixed choices that delegate to the stable CLI. Invalid input or end-of-input shall make no change, and install, source, LAN, disable, dependency-refresh, update, client-revocation, and uninstall mutations shall keep their documented confirmation boundaries.
+- The installed dependency-refresh command shall offer the same default-No six-root refresh as installation, preserve an owned enabled/service state after success when possible, and otherwise follow the same fail-stopped package safety rules.
 - Commands shall reject unknown flags, excess arguments, and incompatible option combinations.
 - Every operation shall provide stable human output and documented exit classes. Commands whose grammar includes `--json` shall instead provide the documented `nutmerlin.result.v1` JSON envelope.
 - Exit classes shall use 0 success, 64 usage, 69 unavailable, 70 internal, 75 temporary, and 78 configuration refusal.

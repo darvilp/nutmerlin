@@ -25,6 +25,7 @@ NUTMerlin invokes and configures Entware NUT. It does not replace any NUT protoc
 The exact command grammar is:
 
 ```text
+menu
 status [--json]
 diagnostics [--json]
 service start|stop|restart
@@ -35,9 +36,12 @@ lan configure --address IPv4 --cidr CIDR
 lan disable
 client add NAME [--json]
 client revoke CLIENT_ID
+dependencies refresh
 enable | disable | repair | uninstall
 update ARCHIVE
 ```
+
+`menu` is an invoked local-terminal adapter, not a background process or a second management API. It treats an installed CLI as callable only after the complete code, configuration, hook, and installation-ID ownership state verifies. It renders fixed choices and forwards bounded literal values to this same CLI. It never evaluates input, accepts raw configuration, or bypasses the CLI's validation and ownership checks. A newly generated client secret passes directly through once and is not redisplayed by the menu.
 
 ### Installer and ownership
 
@@ -153,7 +157,7 @@ NUTMerlin does not install or configure the remote client's shutdown command and
 
 ## 9. Install, update, repair, and removal
 
-The development installer supports an isolated destination root. Router installation requires explicit production gating and a healthy preexisting Entware installation. It performs ownership, foreign-NUT, storage, package-manager, and compatibility checks before offering a default-No targeted refresh. Interactive acceptance or `--install-dependencies` authorizes exactly `/opt/bin/opkg update` followed by one install invocation naming the six required NUT roots. Existing owned services, periodic recovery, and external admission are stopped before that mutation; failure remains disabled and stopped. Success re-probes the complete compatibility contract and rechecks foreign state before installation continues. The installer emits bounded pre/post package evidence for the user; it creates no package-history store. No lifecycle path mutates packages.
+The development installer supports an isolated destination root. Router installation requires explicit production gating and a healthy preexisting Entware installation. It performs ownership, foreign-NUT, storage, package-manager, and compatibility checks before offering a default-No targeted refresh. Interactive acceptance or `--install-dependencies` authorizes exactly `/opt/bin/opkg update` followed by one install invocation naming the six required NUT roots. The installed local menu exposes the same default-No operation through `dependencies refresh`; it does not add any broader package action. Existing owned services, periodic recovery, and external admission are stopped before that mutation; failure remains disabled and stopped. Success re-probes the complete compatibility contract and rechecks foreign state before restoring the prior enabled/service intent when safe. The operation emits bounded pre/post package evidence for the user and creates no package-history store. No automatic lifecycle path mutates packages.
 
 Update accepts a local fixed-format archive and requires an adjacent `<archive>.sha256` sidecar containing the archive digest and basename. After verifying that digest, it extracts into one private sibling code directory and verifies the internal fixed-inventory per-file checksum manifest. It then stops exposure/services, renames the current code root to one temporary backup, activates the candidate, and performs a smoke check. It immediately restores on failure and deletes the backup on success.
 

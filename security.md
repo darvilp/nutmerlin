@@ -13,13 +13,15 @@ NUTMerlin protects:
 
 The administrator's local router shell is trusted. NUT client traffic, NUT-reported values, USB identity data, archive contents, configuration inputs, hook contents, package output, and filesystem state are untrusted until validated.
 
-v0.1 deliberately creates no browser, HTTP management, remote-action, inbound message, or general command surface.
+v0.1 deliberately creates no browser, HTTP management, remote-action, inbound message, or general command surface. Its menu is local, invoked, and interactive only.
 
 ## 2. Privilege boundary
 
 Install, hook editing, firewall changes, and service lifecycle require router administration. Parsing and rendering remain narrow shell code. Network-facing `upsd` must use a qualified non-root Entware identity; driver privilege behavior must match the exact supported package/profile.
 
 No input may become shell code, an environment assignment, redirection, pipeline, executable path, hook name, arbitrary driver option, arbitrary NUT directive, firewall fragment, or command argument outside a closed validated position. Runtime code must not use `eval` or source administrator-writable state.
+
+The menu accepts bounded choices, confirmations, and literal fields and dispatches only fixed CLI operations. It verifies the complete installed ownership state before executing the installed CLI. Invalid input, unverified installation state, and end-of-input are inert. It does not provide a shell escape, raw configuration editor, arbitrary executable path, or alternate authorization path; consequential choices retain explicit confirmations.
 
 ## 3. Ownership and filesystem safety
 
@@ -57,7 +59,7 @@ Credential revocation is a security-reducing configuration change and cannot be 
 
 ## 7. Package and update safety
 
-NUTMerlin never bootstraps or repairs Entware, changes feeds, invokes a blanket package upgrade, downgrades/removes packages, or installs optional roots. Before any package mutation it verifies ownership, foreign-NUT state, storage, package-manager health, and the current six-root compatibility result. Interactive refresh defaults to no; noninteractive authorization requires `--install-dependencies`. Authorization permits only `/opt/bin/opkg update` and one targeted install of all six roots with normal dependency resolution. Existing owned service/recovery/network surfaces close first. Mutation or post-check failure remains disabled and stopped; compatible decline proceeds without `opkg`, while missing/incompatible decline stops.
+NUTMerlin never bootstraps or repairs Entware, changes feeds, invokes a blanket package upgrade, downgrades/removes packages, or installs optional roots. Before any package mutation it verifies ownership, foreign-NUT state, storage, package-manager health, and the current six-root compatibility result. Interactive install and installed-menu refresh both default to no; installer-only noninteractive authorization requires `--install-dependencies`. Authorization permits only `/opt/bin/opkg update` and one targeted install of all six roots with normal dependency resolution. Existing owned service/recovery/network surfaces close first. Mutation or post-check failure remains disabled and stopped; compatible decline proceeds without `opkg`, while missing/incompatible decline stops.
 
 Update accepts only a local archive with a required adjacent `<archive>.sha256` sidecar and an internal allowlisted per-file checksum manifest. It verifies the archive digest, safe paths/types, inventory, file digests, and compatibility before replacing code. v0.1 checks transport integrity but does not claim an independent publisher-authentication root. There is no network downloader or stream-to-shell path.
 

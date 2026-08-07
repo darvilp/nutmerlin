@@ -24,3 +24,10 @@ setup() {
 	[ "$status" -eq 0 ]
 	[ "$output" = 'management lifecycle: disable=closed enable=running repair=running update=running uninstall=owned-only' ]
 }
+
+@test "installed interactive menu controls the real dummy NUT process chain" {
+	run "$repository_root/test/integration/run-installed-core.sh" menu
+
+	[ "$status" -eq 0 ]
+	[ "$output" = 'interactive menu: start=running restart=running stop=closed' ]
+}

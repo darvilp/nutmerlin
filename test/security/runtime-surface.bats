@@ -108,6 +108,14 @@ teardown() {
 	[ "$status" -eq 1 ]
 }
 
+@test "interactive menu has no evaluator downloader or raw NUT command surface" {
+	run rg -n \
+		'eval|(^|[[:space:]])(sh|ash|bash)[[:space:]]+-c|curl|wget|ftp:|https?:|upscmd|upsrw|FSD|NUT_CONFPATH|ups[.]conf|upsd[.]conf|upsd[.]users' \
+		"$REPOSITORY_ROOT/lib/nutmerlin/menu.sh"
+
+	[ "$status" -eq 1 ]
+}
+
 @test "listener probes fail closed when socket state cannot be inspected" {
 	empty_path=$NUTMERLIN_TEST_ROOT/empty-path
 	mkdir "$empty_path"

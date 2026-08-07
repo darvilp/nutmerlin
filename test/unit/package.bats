@@ -36,6 +36,7 @@ lib/nutmerlin/entware.sh
 lib/nutmerlin/hooks.sh
 lib/nutmerlin/lifecycle.sh
 lib/nutmerlin/management.sh
+lib/nutmerlin/menu.sh
 lib/nutmerlin/ownership.sh
 lib/nutmerlin/paths.sh
 lib/nutmerlin/platform.sh
@@ -65,6 +66,7 @@ lib/nutmerlin/entware.sh
 lib/nutmerlin/hooks.sh
 lib/nutmerlin/lifecycle.sh
 lib/nutmerlin/management.sh
+lib/nutmerlin/menu.sh
 lib/nutmerlin/ownership.sh
 lib/nutmerlin/paths.sh
 lib/nutmerlin/platform.sh
@@ -92,6 +94,7 @@ drwxr-xr-x lib/nutmerlin/
 -rw-r--r-- lib/nutmerlin/hooks.sh
 -rw-r--r-- lib/nutmerlin/lifecycle.sh
 -rw-r--r-- lib/nutmerlin/management.sh
+-rw-r--r-- lib/nutmerlin/menu.sh
 -rw-r--r-- lib/nutmerlin/ownership.sh
 -rw-r--r-- lib/nutmerlin/paths.sh
 -rw-r--r-- lib/nutmerlin/platform.sh

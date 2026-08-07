@@ -18,6 +18,7 @@ lib/nutmerlin/entware.sh
 lib/nutmerlin/hooks.sh
 lib/nutmerlin/lifecycle.sh
 lib/nutmerlin/management.sh
+lib/nutmerlin/menu.sh
 lib/nutmerlin/ownership.sh
 lib/nutmerlin/paths.sh
 lib/nutmerlin/platform.sh
@@ -46,6 +47,7 @@ drwxr-xr-x lib/nutmerlin/
 -rw-r--r-- lib/nutmerlin/hooks.sh
 -rw-r--r-- lib/nutmerlin/lifecycle.sh
 -rw-r--r-- lib/nutmerlin/management.sh
+-rw-r--r-- lib/nutmerlin/menu.sh
 -rw-r--r-- lib/nutmerlin/ownership.sh
 -rw-r--r-- lib/nutmerlin/paths.sh
 -rw-r--r-- lib/nutmerlin/platform.sh
@@ -70,6 +72,7 @@ lib/nutmerlin/entware.sh
 lib/nutmerlin/hooks.sh
 lib/nutmerlin/lifecycle.sh
 lib/nutmerlin/management.sh
+lib/nutmerlin/menu.sh
 lib/nutmerlin/ownership.sh
 lib/nutmerlin/paths.sh
 lib/nutmerlin/platform.sh
@@ -254,6 +257,7 @@ update_verify_extracted_archive() {
 		lib/nutmerlin/client.sh lib/nutmerlin/configuration.sh \
 		lib/nutmerlin/entware.sh lib/nutmerlin/hooks.sh \
 		lib/nutmerlin/lifecycle.sh lib/nutmerlin/management.sh \
+		lib/nutmerlin/menu.sh \
 		lib/nutmerlin/ownership.sh lib/nutmerlin/paths.sh \
 		lib/nutmerlin/platform.sh lib/nutmerlin/result.sh \
 		lib/nutmerlin/service.sh lib/nutmerlin/status.sh \
@@ -262,7 +266,7 @@ update_verify_extracted_archive() {
 	done
 	update_verify_extracted_file bin/nutmerlin 755 || return 1
 	update_verify_extracted_file install.sh 755 || return 1
-	[ "$(find "$UPDATE_STAGE" -mindepth 1 -type f | wc -l)" -eq 20 ] || return 1
+	[ "$(find "$UPDATE_STAGE" -mindepth 1 -type f | wc -l)" -eq 21 ] || return 1
 	[ "$(find "$UPDATE_STAGE" -mindepth 1 -type d | wc -l)" -eq 5 ] || return 1
 	[ -z "$(find "$UPDATE_STAGE" -mindepth 1 ! -type f ! -type d -print -quit)" ] || return 1
 	update_manifest_inventory=$(awk '{ print $2 }' "$UPDATE_STAGE/MANIFEST.sha256") || return 1

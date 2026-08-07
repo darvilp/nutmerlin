@@ -9,9 +9,9 @@ installed_root=
 integration_tab=$(printf '\t')
 
 case $test_scenario in
-	service | rollback | lifecycle | client | management) ;;
+	service | rollback | lifecycle | client | management | menu) ;;
 	*)
-		printf '%s\n' 'usage: run-installed-core.sh service|rollback|lifecycle|client|management' >&2
+		printf '%s\n' 'usage: run-installed-core.sh service|rollback|lifecycle|client|management|menu' >&2
 		exit 64
 		;;
 esac
@@ -195,6 +195,8 @@ run_upsmon_until() {
 
 if [ "$test_scenario" = lifecycle ]; then
 	invoke_hook services-start
+elif [ "$test_scenario" = menu ]; then
+	printf '3\n5\nq\n' | invoke_cli menu >"$installed_root/menu-start.log"
 else
 	invoke_cli service start >"$installed_root/start.log"
 fi
@@ -481,10 +483,14 @@ if [ "$test_scenario" = client ]; then
 fi
 
 chmod 500 "$installed_root/opt"
-env NUTMERLIN_ENABLE_TEST_ADAPTERS=1 \
-	NUTMERLIN_TEST_ROOT="$installed_root" \
-	NUTMERLIN_TEST_RUN_USER="$NUTMERLIN_TEST_RUN_USER" \
-	"$installed_cli" service stop >"$installed_root/stop.log"
+if [ "$test_scenario" = menu ]; then
+	printf '4\nq\n' | invoke_cli menu >"$installed_root/menu-stop.log"
+else
+	env NUTMERLIN_ENABLE_TEST_ADAPTERS=1 \
+		NUTMERLIN_TEST_ROOT="$installed_root" \
+		NUTMERLIN_TEST_RUN_USER="$NUTMERLIN_TEST_RUN_USER" \
+		"$installed_cli" service stop >"$installed_root/stop.log"
+fi
 chmod 700 "$installed_root/opt"
 if ss -ltn | awk 'NR > 1 { print $4 }' | grep -Eq '(^|:)3493$'; then
 	exit 1
@@ -496,6 +502,14 @@ elif [ "$test_scenario" = lifecycle ]; then
 	printf '%s\n' 'Merlin lifecycle: hooks=5 recovery=bounded status=healthy'
 elif [ "$test_scenario" = client ]; then
 	printf '%s\n' 'standard secondary authentication: correct=accepted wrong=rejected revoked=rejected'
+elif [ "$test_scenario" = menu ]; then
+	grep -F 'service: ok: service is running' "$installed_root/menu-start.log" >/dev/null
+	grep -F 'service: ok: service restarted successfully' "$installed_root/menu-start.log" >/dev/null
+	grep -F 'service: ok: owned service is stopped' "$installed_root/menu-stop.log" >/dev/null
+	if grep -F 'secret=' "$installed_root/menu-start.log" "$installed_root/menu-stop.log" >/dev/null; then
+		exit 1
+	fi
+	printf '%s\n' 'interactive menu: start=running restart=running stop=closed'
 else
 	printf '%s\n' 'installed dummy status: OL'
 fi

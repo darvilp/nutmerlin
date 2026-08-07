@@ -20,6 +20,7 @@ The router reports UPS state and manages the NUT service. It does not centrally 
 - Generates complete owned NUT configurations with atomic selection and one last-known-good fallback.
 - Integrates with Merlin lifecycle, mount, firewall, and shutdown hooks.
 - Provides stable human-readable and JSON CLI status and diagnostics.
+- Provides one local interactive menu for installation and routine administration.
 - Exposes the real NUT source only to one explicit trusted IPv4 scope.
 - Creates a unique restricted `upsmon secondary` credential for each client.
 - Supports user-initiated disable, repair, update, and conservative uninstall.
@@ -36,13 +37,15 @@ nutmerlin uninstall
 
 Disable retains configuration and credentials. Repair reconstructs only unambiguous owned modes, selectors, hook blocks, scheduling, and service state. Update requires an adjacent `.sha256` sidecar, validates the fixed internal manifest, uses one immediate temporary backup, and performs no download or Entware operation. Uninstall requires attributable `/opt` state, removes only verified NUTMerlin artifacts, and always retains every Entware package.
 
+Run `./bin/nutmerlin menu` from an unpacked package to install, or run `/jffs/addons/nutmerlin/bin/nutmerlin menu` after installation. The fixed menu delegates to the same CLI and keeps confirmation prompts for consequential changes. Its Entware option checks and, only after an explicit default-No confirmation, refreshes the six required NUT package roots; it does not perform general Entware maintenance.
+
 ## Deliberate exclusions
 
 v0.1 has no router-side outage policy, remote shutdown executor, action journal, FSD workflow, writable UPS administration, output control, WebUI, webhook, MQTT, SSH, WinRM, Redfish, support bundle, configuration import/export, or broad hardware matrix.
 
 ## Current status
 
-The owned dummy core, Merlin lifecycle, uniquely identified USB source, exact trusted-LAN exposure, restricted secondary-client credentials, owned-only lifecycle management, deterministic package, and local user-initiated update are implemented and covered by host-safe tests. The interactive menu and exact router/UPS evidence remain on the v0.1 track in `plan.md`. No physical-UPS claim has yet been made. This repository is development software and not a published release.
+The owned dummy core, Merlin lifecycle, uniquely identified USB source, exact trusted-LAN exposure, restricted secondary-client credentials, owned-only lifecycle management, deterministic package, local user-initiated update, and interactive menu are implemented and covered by host-safe tests. Exact router/UPS evidence remains on the v0.1 track in `plan.md`. No physical-UPS claim has yet been made. This repository is development software and not a published release.
 
 ## Development
 

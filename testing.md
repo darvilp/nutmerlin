@@ -24,6 +24,7 @@ Test behavior through the CLI, generated configuration, installer destination ro
 - Hook insertion, repair, and exact removal.
 - Firewall/listener construction.
 - Credential generation, once-only output, redaction, and revocation.
+- Scripted local-menu navigation, confirmation defaults, literal-value forwarding, end-of-input safety, and once-only secret display.
 - Recovery locking and bounded retry states.
 - Archive inventory and path safety.
 
@@ -39,6 +40,7 @@ Expected values shall be fixed specification examples, not values recomputed by 
 4. Confirm expected status values.
 5. Restart and stop cleanly.
 6. Prove invalid configuration leaves no running process.
+7. Start, restart, query, and stop the installed chain through the interactive menu.
 
 Mock process output cannot satisfy this layer. CI installs only host test packages; this does not modify router Entware.
 

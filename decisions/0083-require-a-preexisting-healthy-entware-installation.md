@@ -9,7 +9,7 @@
 - Require a preexisting mounted Entware installation with readable consistent `opkg` metadata and enough writable storage for NUTMerlin-owned configuration.
 - Before package mutation, read-only checks verify ownership, foreign-NUT state, writable storage, `opkg` metadata and executable, package metadata/architecture, required binaries/options, and an unprivileged NUT identity.
 - The only mutable roots are `nut`, `nut-common`, `nut-server`, `nut-upsc`, `nut-driver-dummy-ups`, and `nut-driver-usbhid-ups`.
-- Interactive installation asks `Refresh the six required Entware NUT packages? [y/N]`; the default is no. A noninteractive refresh requires `--install-dependencies`.
+- Interactive installation and the installed local menu ask `Refresh the six required Entware NUT packages? [y/N]`; the default is no. A noninteractive refresh is available only during installation and requires `--install-dependencies`.
 - Affirmative authorization runs `/opt/bin/opkg update`, then exactly one `/opt/bin/opkg install` naming all six roots. Normal dependency resolution for those roots is allowed.
 - Compatible decline proceeds without package mutation. Missing or incompatible decline stops with exact administrator guidance.
 - Existing NUTMerlin service, periodic recovery, listener, and firewall admission stop before package mutation. Mutation or post-refresh incompatibility leaves NUTMerlin disabled and stopped.

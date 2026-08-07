@@ -13,6 +13,7 @@ fi
 
 usage() {
 	printf '%s\n' 'usage: nutmerlin status [--json]' >&2
+	printf '%s\n' '       nutmerlin menu' >&2
 	printf '%s\n' '       nutmerlin diagnostics [--json]' >&2
 	printf '%s\n' '       nutmerlin service start|stop|restart' >&2
 	printf '%s\n' '       nutmerlin source show|use-dummy' >&2
@@ -21,6 +22,7 @@ usage() {
 	printf '%s\n' '       nutmerlin lan disable' >&2
 	printf '%s\n' '       nutmerlin client add NAME [--json]' >&2
 	printf '%s\n' '       nutmerlin client revoke CLIENT_ID' >&2
+	printf '%s\n' '       nutmerlin dependencies refresh' >&2
 	printf '%s\n' '       nutmerlin enable|disable|repair|uninstall' >&2
 	printf '%s\n' '       nutmerlin update ARCHIVE' >&2
 	exit 64
@@ -31,6 +33,15 @@ command_name=$1
 shift
 
 case $command_name in
+	menu)
+		[ "$#" -eq 0 ] || usage
+		for menu_library in paths configuration hooks ownership menu; do
+			# shellcheck disable=SC1090
+			. "$library_dir/$menu_library.sh"
+		done
+		paths_initialize
+		menu_run "$program_dir/.." "$installed_layout"
+		;;
 	status)
 		output_format=human
 		case $# in
@@ -360,6 +371,19 @@ case $command_name in
 				result_emit client.revoke human ok success "$CLIENT_MESSAGE"
 				;;
 		esac
+		;;
+	dependencies)
+		if [ "$#" -ne 1 ] || [ "$1" != refresh ]; then
+			usage
+		fi
+		for dependency_library in paths entware configuration hooks platform ownership \
+			service lifecycle management result; do
+			# shellcheck disable=SC1090
+			. "$library_dir/$dependency_library.sh"
+		done
+		paths_initialize
+		management_refresh_entware
+		result_emit dependencies.refresh human ok success "$MANAGEMENT_MESSAGE"
 		;;
 	update)
 		[ "$#" -eq 1 ] || usage

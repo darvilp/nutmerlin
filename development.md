@@ -49,7 +49,7 @@ NUTMerlin treats Entware as shared and preexisting. It checks these NUT roots an
 - `nut-driver-dummy-ups`
 - `nut-driver-usbhid-ups`
 
-The product does not lock the transitive feed or claim compatibility solely from version strings. Interactive installation offers a refresh of all six roots and defaults to no. Acceptance runs `opkg update` and one targeted install of those roots; normal dependency resolution is allowed. Noninteractive authorization requires `--install-dependencies`. Compatible decline proceeds without `opkg`; missing/incompatible decline stops with exact guidance. The installer prints bounded pre/post package evidence but stores no operational package history. NUTMerlin never installs or repairs Entware itself, changes feeds, invokes a blanket package upgrade, downgrades/removes packages, or installs optional roots.
+The product does not lock the transitive feed or claim compatibility solely from version strings. Interactive installation and the installed menu offer a refresh of all six roots and default to no. Acceptance runs `opkg update` and one targeted install of those roots; normal dependency resolution is allowed. Installer-only noninteractive authorization requires `--install-dependencies`. Compatible decline proceeds without `opkg`; missing/incompatible decline stops with exact guidance. The operation prints bounded pre/post package evidence but stores no operational package history. NUTMerlin never installs or repairs Entware itself, changes feeds, invokes a blanket package upgrade, downgrades/removes packages, or installs optional roots.
 
 No router runtime dependency may be added without an accepted decision.
 
@@ -83,6 +83,15 @@ The default-No prompt is the normal package choice. For an explicitly noninterac
 ```sh
 NUTMERLIN_ALLOW_PRODUCTION_ROUTER=1 ./install.sh --install-dependencies
 ```
+
+The package and installed core both provide the conventional local menu:
+
+```sh
+./bin/nutmerlin menu
+/jffs/addons/nutmerlin/bin/nutmerlin menu
+```
+
+From an installed menu, “Refresh required Entware NUT packages” performs the same six-root compatibility check and default-No confirmation. No other Entware maintenance is exposed.
 
 The installer never downloads NUTMerlin code or installs Entware itself. Preserve a separate router recovery path and inspect all proposed package, hook, and firewall changes before the first test.
 

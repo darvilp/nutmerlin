@@ -155,6 +155,7 @@ lib/nutmerlin/entware.sh
 lib/nutmerlin/hooks.sh
 lib/nutmerlin/lifecycle.sh
 lib/nutmerlin/management.sh
+lib/nutmerlin/menu.sh
 lib/nutmerlin/ownership.sh
 lib/nutmerlin/paths.sh
 lib/nutmerlin/platform.sh

@@ -34,6 +34,8 @@ esac
 . "$source_root/lib/nutmerlin/ownership.sh"
 # shellcheck disable=SC1091
 . "$source_root/lib/nutmerlin/service.sh"
+# shellcheck disable=SC1091
+. "$source_root/lib/nutmerlin/management.sh"
 
 paths_initialize
 if [ "${NUTMERLIN_ENABLE_TEST_ADAPTERS:-0}" != 1 ] &&
@@ -44,66 +46,11 @@ fi
 ownership_check_before_install
 entware_plan_dependency_refresh "$install_dependencies"
 
-install_refresh_dependencies() {
-	refreshing_owned_installation=0
-	entware_previous_enabled=
-	entware_service_was_active=0
-	if [ "$NUTMERLIN_OWNERSHIP_STATE" = owned ]; then
-		refreshing_owned_installation=1
-		installed_code_root=$NUTMERLIN_JFFS_ROOT/addons/nutmerlin
-		entware_previous_enabled=$(cat "$installed_code_root/enabled")
-		case $entware_previous_enabled in
-			0 | 1) ;;
-			*) return 78 ;;
-		esac
-		if [ -e "$NUTMERLIN_TMP_ROOT/nutmerlin/run/upsd.pid" ]; then
-			entware_service_was_active=1
-		fi
-		printf '%s\n' 0 >"$installed_code_root/enabled"
-		platform_cru_remove || {
-			printf '%s\n' 'Entware package refresh refused: periodic recovery could not be stopped safely' >&2
-			return 78
-		}
-		service_stop || {
-			printf '%s\n' 'Entware package refresh refused: existing NUT service could not be stopped safely' >&2
-			return 78
-		}
-	fi
-	refresh_status=0
-	entware_execute_dependency_refresh || refresh_status=$?
-	post_refresh_ownership_status=0
-	ownership_check_before_install || post_refresh_ownership_status=$?
-	if [ "$post_refresh_ownership_status" -ne 0 ]; then
-		printf '%s\n' 'Entware post-refresh ownership check failed; NUTMerlin remains disabled and stopped' >&2
-		entware_refresh_failure_guidance
-		return "$post_refresh_ownership_status"
-	fi
-	[ "$refresh_status" -eq 0 ] || return "$refresh_status"
-	if [ "$refreshing_owned_installation" -eq 1 ]; then
-		printf '%s\n' "$entware_previous_enabled" >"$installed_code_root/enabled"
-		if [ "$entware_previous_enabled" -eq 1 ]; then
-			platform_cru_ensure || {
-				printf '%s\n' 0 >"$installed_code_root/enabled"
-				printf '%s\n' 'Entware refresh recovery failed; NUTMerlin remains disabled and stopped' >&2
-				return 75
-			}
-			if [ "$entware_service_was_active" -eq 1 ] && ! service_start; then
-				printf '%s\n' 0 >"$installed_code_root/enabled"
-				platform_cru_remove || :
-				service_stop || :
-				printf '%s\n' 'Entware refresh recovery failed; NUTMerlin remains disabled and stopped' >&2
-				return 75
-			fi
-		fi
-	fi
-	return 0
-}
-
 if [ "$NUTMERLIN_ENTWARE_REFRESH_AUTHORIZED" -eq 1 ]; then
 	if [ "$NUTMERLIN_OWNERSHIP_STATE" = owned ]; then
-		service_run_locked install_refresh_dependencies
+		service_run_locked management_refresh_entware_locked
 	else
-		install_refresh_dependencies
+		management_refresh_entware_locked
 	fi
 fi
 

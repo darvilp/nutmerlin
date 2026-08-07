@@ -43,7 +43,7 @@ Only ADRs listed as active in `decisions/README.md` are binding for v0.1. Histor
 - Use Entware NUT for drivers, `upsd`, `upsc`, and standard client semantics.
 - Keep substantial code in `/jffs/addons/nutmerlin` and only small delimited blocks in Merlin user-script hooks.
 - Do not permanently patch firmware files.
-- Treat healthy preexisting Entware as a shared prerequisite. Only the installer may, after an explicit default-No prompt or `--install-dependencies`, run `opkg update` and one targeted install/refresh of the six required NUT package roots. Never bootstrap or repair Entware, change feeds, run a blanket upgrade, downgrade packages, or remove packages.
+- Treat healthy preexisting Entware as a shared prerequisite. The installer may, after an explicit default-No prompt or `--install-dependencies`, run `opkg update` and one targeted install/refresh of the six required NUT package roots. The installed local menu may offer that same targeted operation only after an explicit default-No prompt; it has no noninteractive authorization. Never bootstrap or repair Entware, change feeds, run a blanket upgrade, downgrade packages, or remove packages.
 - Treat `/opt` as fallible. Keep high-frequency state and logs in `/tmp`, and do not write persistent state on every poll.
 - Refuse foreign or ambiguously owned NUT deployments instead of adopting or overwriting them.
 - Use complete owned NUT configuration sets selected atomically through `NUT_CONFPATH`, retaining only current and last-known-good.
