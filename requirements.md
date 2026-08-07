@@ -112,12 +112,14 @@ nutmerlin uninstall
 ## 10. Lifecycle operations
 
 - Fresh install and update shall remain monitoring-only.
+- A published alpha may provide one release-specific fresh-install launcher. The launcher shall pin its GitHub release tag, core archive name, and expected SHA-256; accept no runtime URL or version; download only into a private `/tmp` directory; verify the archive digest, exact inventory, safe types/modes, and internal manifest; and then enter the existing local menu.
+- The fresh-install launcher shall require `NUTMERLIN_ALLOW_PRODUCTION_ROUTER=1`, use firmware `/usr/sbin/curl`, make no persistent change before a menu action is confirmed, and remove temporary material on success, cancellation, end-of-input, or failure.
 - Disable shall close listener/firewall, stop owned NUT processes, remove the periodic job, and retain owned data.
 - Repair shall restore only attributable files, modes, hook blocks, configuration selection, and service state.
 - Complete uninstall shall require attributable `/opt` state to be present, close exposure, stop services, remove owned code/configuration/credentials/jobs/rules/blocks, and retain Entware packages.
 - Missing storage shall permit safe disable but shall cause complete uninstall to refuse with residual-data guidance.
 - Update shall be user-initiated from a local archive, validate the archive against a required adjacent `<archive>.sha256` sidecar plus its internal fixed-inventory checksum manifest, use one temporary code backup, smoke-test, and restore immediately on failure.
-- v0.1 shall have no automatic update, long-lived release slot, rollback command, rollback quarantine, or release transaction journal.
+- The installed updater shall make no network request. v0.1 shall have no automatic update, generic downloader, stream-to-shell install, long-lived release slot, rollback command, rollback quarantine, or release transaction journal.
 
 ## 11. Evidence and release
 
@@ -125,7 +127,7 @@ nutmerlin uninstall
 - Exact-router and physical-UPS evidence shall remain manual and separately claimed.
 - The first alpha shall record the exact RT-AX86U Pro revision/firmware, Entware/NUT versions, storage, CP1500PFCLCD identity, and client test environment.
 - Physical tests shall remain read-only except for harmless utility-input removal and USB reconnect. They shall not trigger host shutdown, FSD, deep discharge, writable variables, instant commands, or output operations.
-- An alpha package shall be deterministic and published with a source tag and SHA-256 checksum. It shall not claim independent publisher authentication.
+- An alpha core package shall be deterministic and published with a source tag and SHA-256 sidecar. Its deterministic release-specific launcher shall obtain that pinned core over HTTPS and verify the embedded expected digest; v0.1 shall not claim independent publisher authentication for either artifact.
 - OpenPGP roots, independent fingerprint channels, emergency root replacement, full feed locks, AMTM publication, broad matrices, and WebUI artifacts are later release work and shall not block v0.1 alpha.
 
 ## 12. Explicitly deferred

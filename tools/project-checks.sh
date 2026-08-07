@@ -55,7 +55,7 @@ require_nut_binaries() {
 shell_files() {
 	printf '%s\n' "$repository_root/install.sh"
 	find "$repository_root/bin" "$repository_root/lib" "$repository_root/test" "$repository_root/tools" \
-		-type f -name '*.sh' -print
+		-type f \( -name '*.sh' -o -name '*.sh.in' \) -print
 	find "$repository_root/bin" -type f -print
 }
 
@@ -70,7 +70,7 @@ run_lint() {
 
 run_docs_check() {
 	require_commands
-	for document in AGENTS.md CONTEXT.md README.md requirements.md architecture.md security.md testing.md hardware.md development.md plan.md; do
+	for document in AGENTS.md CONTEXT.md INSTALL.md README.md requirements.md architecture.md security.md testing.md hardware.md development.md plan.md; do
 		test -s "$repository_root/$document"
 	done
 	test ! -e "$repository_root/docs/adr"
@@ -95,6 +95,14 @@ run_docs_check() {
 }
 
 run_package() {
+	package_basename=${1:-nutmerlin-core-dev.tar.gz}
+	case $package_basename in
+		nutmerlin-core-*.tar.gz) ;;
+		*)
+			printf '%s\n' 'package output basename is invalid' >&2
+			return 64
+			;;
+	esac
 	require_commands
 	mkdir -p "$repository_root/dist"
 	package_stage=$(mktemp -d "${TMPDIR:-/tmp}/nutmerlin-core-stage.XXXXXX")
@@ -171,13 +179,62 @@ share/dummy/cyberpower.dev'
 		printf '%s\n' 'package build is not byte-deterministic' >&2
 		return 1
 	fi
-	mv -- "$temporary_package" "$repository_root/dist/nutmerlin-core-dev.tar.gz"
-	package_digest=$(sha256sum "$repository_root/dist/nutmerlin-core-dev.tar.gz" |
+	mv -- "$temporary_package" "$repository_root/dist/$package_basename"
+	package_digest=$(sha256sum "$repository_root/dist/$package_basename" |
 		awk '{ print $1 }')
-	printf '%s  %s\n' "$package_digest" nutmerlin-core-dev.tar.gz \
-		>"$repository_root/dist/nutmerlin-core-dev.tar.gz.sha256"
+	printf '%s  %s\n' "$package_digest" "$package_basename" \
+		>"$repository_root/dist/$package_basename.sha256"
 	rm -f -- "$temporary_archive" "$comparison_archive" "$comparison_package"
 	rm -rf -- "$package_stage"
+	trap - EXIT HUP INT TERM
+}
+
+run_release_artifacts() {
+	require_commands
+	if [ ! -f "$repository_root/VERSION" ] || [ -L "$repository_root/VERSION" ]; then
+		printf '%s\n' 'release artifact build refused: VERSION is missing or unsafe' >&2
+		return 78
+	fi
+	[ "$(wc -l <"$repository_root/VERSION")" -eq 1 ] || {
+		printf '%s\n' 'release artifact build refused: VERSION must contain one line' >&2
+		return 78
+	}
+	release_version=$(cat "$repository_root/VERSION")
+	if [ "${#release_version}" -gt 64 ] ||
+		! printf '%s\n' "$release_version" |
+		grep -Eq '^[0-9]+[.][0-9]+[.][0-9]+(-[A-Za-z0-9.]+)?$'; then
+		printf '%s\n' 'release artifact build refused: VERSION is invalid' >&2
+		return 78
+	fi
+	release_archive=nutmerlin-core-$release_version.tar.gz
+	release_launcher=nutmerlin-install-$release_version.sh
+	release_url=https://github.com/darvilp/nutmerlin/releases/download/v$release_version/$release_archive
+	run_package "$release_archive"
+	release_digest=$(sha256sum "$repository_root/dist/$release_archive" | awk '{ print $1 }')
+	release_launcher_path=$repository_root/dist/$release_launcher
+	release_launcher_comparison=$(mktemp "${TMPDIR:-/tmp}/nutmerlin-launcher-compare.XXXXXX")
+	trap 'rm -f -- "$release_launcher_comparison"' EXIT HUP INT TERM
+
+	render_release_launcher() {
+		render_output=$1
+		sed -e "s|@NUTMERLIN_VERSION@|$release_version|g" \
+			-e "s|@NUTMERLIN_ARCHIVE@|$release_archive|g" \
+			-e "s|@NUTMERLIN_DIGEST@|$release_digest|g" \
+			-e "s|@NUTMERLIN_URL@|$release_url|g" \
+			"$repository_root/tools/nutmerlin-install.sh.in" >"$render_output"
+		chmod 755 "$render_output"
+	}
+
+	render_release_launcher "$release_launcher_path"
+	render_release_launcher "$release_launcher_comparison"
+	cmp -s "$release_launcher_path" "$release_launcher_comparison" || {
+		printf '%s\n' 'release launcher build is not byte-deterministic' >&2
+		return 1
+	}
+	/bin/sh -n "$release_launcher_path"
+	shellcheck -s sh "$release_launcher_path"
+	shfmt -d -i 0 -ci "$release_launcher_path"
+	rm -f -- "$release_launcher_comparison"
 	trap - EXIT HUP INT TERM
 }
 
@@ -211,8 +268,11 @@ case $command_name in
 	package)
 		run_package
 		;;
+	release-artifacts)
+		run_release_artifacts
+		;;
 	*)
-		printf '%s\n' 'usage: project-checks.sh bootstrap|lint|test-unit|test-nut|test-security|docs-check|package' >&2
+		printf '%s\n' 'usage: project-checks.sh bootstrap|lint|test-unit|test-nut|test-security|docs-check|package|release-artifacts' >&2
 		exit 64
 		;;
 esac

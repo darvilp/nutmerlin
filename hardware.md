@@ -48,6 +48,7 @@ If the reference UPS exposes no stable discriminator that survives reboot/reconn
 6. Query from one client in the configured trusted LAN scope.
 7. Start one standard secondary with its unique credential; prove wrong/revoked credentials fail.
 8. Exercise reboot, delayed `/opt`, killed services, firewall restart, disable, repair, update, and uninstall.
+9. Confirm `/usr/sbin/curl` supports the exact fresh-install arguments, then exercise the published release-pinned launcher and verify that quitting its menu leaves no installation or bootstrap workspace.
 
 Never perform FSD, host shutdown, writable variables, instant commands, output-off, outlet control, delayed power, deep discharge, or sacrificial networking/storage tests.
 

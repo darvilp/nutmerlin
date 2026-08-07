@@ -1,0 +1,313 @@
+#!/bin/sh
+
+set -eu
+
+LC_ALL=C
+export LC_ALL
+
+bootstrap_version='@NUTMERLIN_VERSION@'
+bootstrap_archive='@NUTMERLIN_ARCHIVE@'
+bootstrap_expected_digest='@NUTMERLIN_DIGEST@'
+bootstrap_archive_url='@NUTMERLIN_URL@'
+bootstrap_workspace=
+
+bootstrap_message() {
+	printf '%s\n' "$1" >&2
+}
+
+bootstrap_exit() {
+	bootstrap_exit_status=$1
+	bootstrap_exit_message=$2
+	bootstrap_message "$bootstrap_exit_message"
+	exit "$bootstrap_exit_status"
+}
+
+bootstrap_owner_id() {
+	id -u
+}
+
+bootstrap_regular_owned_file() {
+	bootstrap_file=$1
+	[ -f "$bootstrap_file" ] && [ ! -L "$bootstrap_file" ] &&
+		[ "$(stat -c '%h' "$bootstrap_file" 2>/dev/null || :)" = 1 ] &&
+		[ "$(stat -c '%u' "$bootstrap_file" 2>/dev/null || :)" = "$(bootstrap_owner_id)" ]
+}
+
+bootstrap_prepare_environment() {
+	if [ "${NUTMERLIN_ENABLE_TEST_ADAPTERS:-0}" = 1 ]; then
+		bootstrap_test_root=${NUTMERLIN_TEST_ROOT:-}
+		case $bootstrap_test_root in
+			/*) ;;
+			*) bootstrap_exit 78 'bootstrap refused: isolated test root is invalid' ;;
+		esac
+		if [ ! -d "$bootstrap_test_root" ] || [ -L "$bootstrap_test_root" ]; then
+			bootstrap_exit 78 'bootstrap refused: isolated test root is invalid'
+		fi
+		bootstrap_resolved_test_root=$(CDPATH='' cd -- "$bootstrap_test_root" 2>/dev/null && pwd -P) ||
+			bootstrap_exit 78 'bootstrap refused: isolated test root is invalid'
+		[ "$bootstrap_resolved_test_root" = "$bootstrap_test_root" ] ||
+			bootstrap_exit 78 'bootstrap refused: isolated test root is invalid'
+		if [ "$(stat -c '%a' "$bootstrap_test_root" 2>/dev/null || :)" != 700 ] ||
+			[ "$(stat -c '%u' "$bootstrap_test_root" 2>/dev/null || :)" != "$(bootstrap_owner_id)" ]; then
+			bootstrap_exit 78 'bootstrap refused: isolated test root is unsafe'
+		fi
+		bootstrap_test_marker=$bootstrap_test_root/.nutmerlin-test-root
+		if ! bootstrap_regular_owned_file "$bootstrap_test_marker" ||
+			[ "$(cat "$bootstrap_test_marker")" != nutmerlin-test-root-v1 ]; then
+			bootstrap_exit 78 'bootstrap refused: isolated test marker is invalid'
+		fi
+		bootstrap_tmp_base=$bootstrap_test_root/tmp
+		if [ ! -d "$bootstrap_tmp_base" ] || [ -L "$bootstrap_tmp_base" ]; then
+			bootstrap_exit 78 'bootstrap refused: isolated temporary root is invalid'
+		fi
+		bootstrap_test_bin=$bootstrap_test_root/bin
+		if [ ! -d "$bootstrap_test_bin" ] || [ -L "$bootstrap_test_bin" ]; then
+			bootstrap_exit 78 'bootstrap refused: isolated curl adapter parent is invalid'
+		fi
+		bootstrap_resolved_test_bin=$(CDPATH='' cd -- "$bootstrap_test_bin" 2>/dev/null && pwd -P) ||
+			bootstrap_exit 78 'bootstrap refused: isolated curl adapter parent is invalid'
+		[ "$bootstrap_resolved_test_bin" = "$bootstrap_test_bin" ] ||
+			bootstrap_exit 78 'bootstrap refused: isolated curl adapter parent is invalid'
+		bootstrap_curl=${NUTMERLIN_TEST_CURL:-}
+		[ "$bootstrap_curl" = "$bootstrap_test_bin/curl" ] ||
+			bootstrap_exit 78 'bootstrap refused: isolated curl adapter is invalid'
+		if ! bootstrap_regular_owned_file "$bootstrap_curl" ||
+			[ ! -x "$bootstrap_curl" ] ||
+			[ "$(stat -c '%a' "$bootstrap_curl" 2>/dev/null || :)" != 700 ]; then
+			bootstrap_exit 78 'bootstrap refused: isolated curl adapter is unsafe'
+		fi
+	else
+		[ "${NUTMERLIN_ALLOW_PRODUCTION_ROUTER:-0}" = 1 ] ||
+			bootstrap_exit 78 'bootstrap refused: set NUTMERLIN_ALLOW_PRODUCTION_ROUTER=1 for router installation'
+		bootstrap_tmp_base=/tmp
+		bootstrap_curl=/usr/sbin/curl
+		if [ ! -x "$bootstrap_curl" ]; then
+			bootstrap_exit 69 'bootstrap unavailable: firmware /usr/sbin/curl is missing'
+		fi
+	fi
+}
+
+bootstrap_expected_archive_inventory() {
+	printf '%s\n' 'LICENSE
+MANIFEST.sha256
+README.md
+VERSION
+bin/
+bin/nutmerlin
+install.sh
+lib/
+lib/nutmerlin/
+lib/nutmerlin/client.sh
+lib/nutmerlin/configuration.sh
+lib/nutmerlin/entware.sh
+lib/nutmerlin/hooks.sh
+lib/nutmerlin/lifecycle.sh
+lib/nutmerlin/management.sh
+lib/nutmerlin/menu.sh
+lib/nutmerlin/ownership.sh
+lib/nutmerlin/paths.sh
+lib/nutmerlin/platform.sh
+lib/nutmerlin/result.sh
+lib/nutmerlin/service.sh
+lib/nutmerlin/status.sh
+lib/nutmerlin/update.sh
+share/
+share/dummy/
+share/dummy/cyberpower.dev'
+}
+
+bootstrap_expected_archive_metadata() {
+	printf '%s\n' '-rw-r--r-- LICENSE
+-rw-r--r-- MANIFEST.sha256
+-rw-r--r-- README.md
+-rw-r--r-- VERSION
+drwxr-xr-x bin/
+-rwxr-xr-x bin/nutmerlin
+-rwxr-xr-x install.sh
+drwxr-xr-x lib/
+drwxr-xr-x lib/nutmerlin/
+-rw-r--r-- lib/nutmerlin/client.sh
+-rw-r--r-- lib/nutmerlin/configuration.sh
+-rw-r--r-- lib/nutmerlin/entware.sh
+-rw-r--r-- lib/nutmerlin/hooks.sh
+-rw-r--r-- lib/nutmerlin/lifecycle.sh
+-rw-r--r-- lib/nutmerlin/management.sh
+-rw-r--r-- lib/nutmerlin/menu.sh
+-rw-r--r-- lib/nutmerlin/ownership.sh
+-rw-r--r-- lib/nutmerlin/paths.sh
+-rw-r--r-- lib/nutmerlin/platform.sh
+-rw-r--r-- lib/nutmerlin/result.sh
+-rw-r--r-- lib/nutmerlin/service.sh
+-rw-r--r-- lib/nutmerlin/status.sh
+-rw-r--r-- lib/nutmerlin/update.sh
+drwxr-xr-x share/
+drwxr-xr-x share/dummy/
+-rw-r--r-- share/dummy/cyberpower.dev'
+}
+
+bootstrap_expected_manifest_inventory() {
+	printf '%s\n' 'LICENSE
+README.md
+VERSION
+bin/nutmerlin
+install.sh
+lib/nutmerlin/client.sh
+lib/nutmerlin/configuration.sh
+lib/nutmerlin/entware.sh
+lib/nutmerlin/hooks.sh
+lib/nutmerlin/lifecycle.sh
+lib/nutmerlin/management.sh
+lib/nutmerlin/menu.sh
+lib/nutmerlin/ownership.sh
+lib/nutmerlin/paths.sh
+lib/nutmerlin/platform.sh
+lib/nutmerlin/result.sh
+lib/nutmerlin/service.sh
+lib/nutmerlin/status.sh
+lib/nutmerlin/update.sh
+share/dummy/cyberpower.dev'
+}
+
+# shellcheck disable=SC2317
+bootstrap_cleanup() {
+	[ -n "$bootstrap_workspace" ] || return 0
+	case $bootstrap_workspace in
+		"$bootstrap_tmp_base"/nutmerlin-bootstrap.*)
+			[ ! -e "$bootstrap_workspace" ] || rm -rf -- "$bootstrap_workspace"
+			;;
+	esac
+	bootstrap_workspace=
+}
+
+bootstrap_create_workspace() {
+	umask 077
+	bootstrap_workspace=$(mktemp -d "$bootstrap_tmp_base/nutmerlin-bootstrap.XXXXXX") ||
+		bootstrap_exit 75 'bootstrap unavailable: private temporary workspace could not be created'
+	trap bootstrap_cleanup EXIT
+	trap 'exit 75' HUP INT TERM
+	case $bootstrap_workspace in
+		"$bootstrap_tmp_base"/nutmerlin-bootstrap.*) ;;
+		*) bootstrap_exit 78 'bootstrap refused: temporary workspace is outside the allowed root' ;;
+	esac
+	if [ ! -d "$bootstrap_workspace" ] || [ -L "$bootstrap_workspace" ]; then
+		bootstrap_exit 78 'bootstrap refused: temporary workspace is unsafe'
+	fi
+	chmod 700 "$bootstrap_workspace" ||
+		bootstrap_exit 75 'bootstrap unavailable: temporary workspace permissions could not be set'
+}
+
+bootstrap_download_archive() {
+	bootstrap_download=$bootstrap_workspace/$bootstrap_archive
+	if ! "$bootstrap_curl" -fL --retry 3 -o "$bootstrap_download" "$bootstrap_archive_url"; then
+		bootstrap_exit 75 'bootstrap unavailable: pinned core download failed'
+	fi
+	bootstrap_regular_owned_file "$bootstrap_download" ||
+		bootstrap_exit 78 'bootstrap refused: downloaded core archive is unsafe'
+	chmod 600 "$bootstrap_download" ||
+		bootstrap_exit 75 'bootstrap unavailable: downloaded core permissions could not be set'
+	bootstrap_observed_digest=$(sha256sum "$bootstrap_download" 2>/dev/null |
+		awk 'NF >= 1 && length($1) == 64 && $1 !~ /[^0-9a-f]/ { print $1; matched++ }
+			END { if (matched != 1) exit 1 }') ||
+		bootstrap_exit 75 'bootstrap unavailable: downloaded core could not be hashed'
+	[ "$bootstrap_observed_digest" = "$bootstrap_expected_digest" ] ||
+		bootstrap_exit 78 'bootstrap refused: core archive SHA-256 mismatch'
+}
+
+bootstrap_verify_archive() {
+	bootstrap_inventory=$(tar -tzf "$bootstrap_download" 2>/dev/null) ||
+		bootstrap_exit 78 'bootstrap refused: core archive cannot be inspected'
+	[ "$bootstrap_inventory" = "$(bootstrap_expected_archive_inventory)" ] ||
+		bootstrap_exit 78 'bootstrap refused: core archive inventory is unsafe'
+	bootstrap_verbose=$(tar -tvzf "$bootstrap_download" 2>/dev/null) ||
+		bootstrap_exit 78 'bootstrap refused: core archive metadata cannot be inspected'
+	bootstrap_metadata=$(printf '%s\n' "$bootstrap_verbose" | awk '{ print $1, $NF }') ||
+		bootstrap_exit 78 'bootstrap refused: core archive metadata cannot be parsed'
+	[ "$bootstrap_metadata" = "$(bootstrap_expected_archive_metadata)" ] ||
+		bootstrap_exit 78 'bootstrap refused: core archive types or modes are unsafe'
+}
+
+bootstrap_extracted_file_is_safe() {
+	bootstrap_extracted_file=$1
+	bootstrap_extracted_mode=$2
+	bootstrap_regular_owned_file "$bootstrap_stage/$bootstrap_extracted_file" || return 1
+	[ "$(stat -c '%a' "$bootstrap_stage/$bootstrap_extracted_file" 2>/dev/null || :)" = "$bootstrap_extracted_mode" ]
+}
+
+bootstrap_extract_archive() {
+	bootstrap_stage=$bootstrap_workspace/core
+	mkdir -m 700 "$bootstrap_stage" ||
+		bootstrap_exit 75 'bootstrap unavailable: private extraction directory could not be created'
+	if ! (umask 077 && tar -xzf "$bootstrap_download" -C "$bootstrap_stage"); then
+		bootstrap_exit 78 'bootstrap refused: core archive extraction failed'
+	fi
+	chmod 700 "$bootstrap_stage" || bootstrap_exit 75 'bootstrap unavailable: extracted core permissions could not be set'
+	chmod 755 "$bootstrap_stage/bin" "$bootstrap_stage/lib" \
+		"$bootstrap_stage/lib/nutmerlin" "$bootstrap_stage/share" \
+		"$bootstrap_stage/share/dummy" "$bootstrap_stage/bin/nutmerlin" \
+		"$bootstrap_stage/install.sh" ||
+		bootstrap_exit 78 'bootstrap refused: extracted core layout is incomplete'
+	chmod 644 "$bootstrap_stage/LICENSE" "$bootstrap_stage/MANIFEST.sha256" \
+		"$bootstrap_stage/README.md" "$bootstrap_stage/VERSION" \
+		"$bootstrap_stage/lib/nutmerlin/"*.sh \
+		"$bootstrap_stage/share/dummy/cyberpower.dev" ||
+		bootstrap_exit 78 'bootstrap refused: extracted core layout is incomplete'
+}
+
+bootstrap_verify_extracted_archive() {
+	[ -d "$bootstrap_stage" ] || return 1
+	[ ! -L "$bootstrap_stage" ] || return 1
+	[ "$(stat -c '%a' "$bootstrap_stage" 2>/dev/null || :)" = 700 ] || return 1
+	[ "$(stat -c '%u' "$bootstrap_stage" 2>/dev/null || :)" = "$(bootstrap_owner_id)" ] || return 1
+	for bootstrap_directory in bin lib lib/nutmerlin share share/dummy; do
+		[ -d "$bootstrap_stage/$bootstrap_directory" ] || return 1
+		[ ! -L "$bootstrap_stage/$bootstrap_directory" ] || return 1
+		[ "$(stat -c '%a' "$bootstrap_stage/$bootstrap_directory" 2>/dev/null || :)" = 755 ] || return 1
+		[ "$(stat -c '%u' "$bootstrap_stage/$bootstrap_directory" 2>/dev/null || :)" = "$(bootstrap_owner_id)" ] || return 1
+	done
+	for bootstrap_file in LICENSE MANIFEST.sha256 README.md VERSION \
+		lib/nutmerlin/client.sh lib/nutmerlin/configuration.sh \
+		lib/nutmerlin/entware.sh lib/nutmerlin/hooks.sh \
+		lib/nutmerlin/lifecycle.sh lib/nutmerlin/management.sh \
+		lib/nutmerlin/menu.sh lib/nutmerlin/ownership.sh \
+		lib/nutmerlin/paths.sh lib/nutmerlin/platform.sh \
+		lib/nutmerlin/result.sh lib/nutmerlin/service.sh \
+		lib/nutmerlin/status.sh lib/nutmerlin/update.sh \
+		share/dummy/cyberpower.dev; do
+		bootstrap_extracted_file_is_safe "$bootstrap_file" 644 || return 1
+	done
+	bootstrap_extracted_file_is_safe bin/nutmerlin 755 || return 1
+	bootstrap_extracted_file_is_safe install.sh 755 || return 1
+	[ "$(find "$bootstrap_stage" -mindepth 1 -type f | wc -l)" -eq 21 ] || return 1
+	[ "$(find "$bootstrap_stage" -mindepth 1 -type d | wc -l)" -eq 5 ] || return 1
+	[ -z "$(find "$bootstrap_stage" -mindepth 1 ! -type f ! -type d -print -quit)" ] || return 1
+	bootstrap_manifest_inventory=$(awk '
+		NF == 2 && length($1) == 64 && $1 !~ /[^0-9a-f]/ { print $2; next }
+		{ exit 1 }
+	' "$bootstrap_stage/MANIFEST.sha256") || return 1
+	[ "$bootstrap_manifest_inventory" = "$(bootstrap_expected_manifest_inventory)" ] || return 1
+	(
+		cd "$bootstrap_stage"
+		sha256sum -c MANIFEST.sha256 >/dev/null 2>&1
+	) || return 1
+	[ "$(wc -l <"$bootstrap_stage/VERSION")" -eq 1 ] || return 1
+	[ "$(cat "$bootstrap_stage/VERSION")" = "$bootstrap_version" ] || return 1
+}
+
+bootstrap_run_menu() {
+	if ! bootstrap_verify_extracted_archive; then
+		bootstrap_exit 78 'bootstrap refused: extracted core manifest verification failed'
+	fi
+	set +e
+	"$bootstrap_stage/bin/nutmerlin" menu
+	bootstrap_menu_status=$?
+	set -e
+	exit "$bootstrap_menu_status"
+}
+
+[ "$#" -eq 0 ] || bootstrap_exit 64 'usage: nutmerlin-install-@NUTMERLIN_VERSION@.sh'
+bootstrap_prepare_environment
+bootstrap_create_workspace
+bootstrap_download_archive
+bootstrap_verify_archive
+bootstrap_extract_archive
+bootstrap_run_menu

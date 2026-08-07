@@ -24,3 +24,5 @@ jobs:
         run: make test-nut
       - name: Build core package
         run: make package
+      - name: Build release artifacts
+        run: make release-artifacts

@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-08-02
-- Updated: 2026-08-06 by ADR 0083
+- Updated: 2026-08-07 by issue #53
 
 ## Context
 
@@ -21,7 +21,7 @@ NUTMerlin v0.1 is a conventional monitoring-only NUT server add-on.
 - Select complete configuration sets atomically through `NUT_CONFPATH`, retaining only current and last-known-good. This is not a general transaction or release-slot framework.
 - Expose the real source only on one explicit router IPv4 address and one explicit trusted IPv4 CIDR with verified listener/firewall agreement.
 - Give each standard secondary client one unique restricted credential. The client owns local shutdown; the router neither dispatches nor verifies it.
-- Keep install and update monitoring-only, local, and user-initiated. Entware itself remains a preexisting prerequisite; installation may explicitly refresh only the six required NUT roots under ADR 0083.
+- Keep install and update monitoring-only and user-initiated. A release-specific fresh-install launcher may fetch only its pinned, digest-verified core into temporary storage before entering the local menu; installed updates remain local-archive-only under ADR 0016. Entware itself remains a preexisting prerequisite; installation may explicitly refresh only the six required NUT roots under ADR 0083.
 - Qualify one exact RT-AX86U Pro and one exact CyberPower CP1500PFCLCD combination before the first alpha; do not generalize those results.
 
 The v0.1 runtime excludes policy authoring/execution, targets, action registries, brokers, journals, scheduling, remote executors, FSD, writable UPS administration, output control, generalized clock/transaction/history systems, import/export, support bundles, WebUI, notification transports, broad hardware matrices, and release-root ceremony.

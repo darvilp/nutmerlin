@@ -116,6 +116,27 @@ teardown() {
 	[ "$status" -eq 1 ]
 }
 
+@test "fresh-install launcher is release-pinned and has no stream-to-shell surface" {
+	make --no-print-directory -C "$REPOSITORY_ROOT" release-artifacts >/dev/null
+	version=$(cat "$REPOSITORY_ROOT/VERSION")
+	launcher=$REPOSITORY_ROOT/dist/nutmerlin-install-$version.sh
+
+	[ "$(grep -Fc "https://github.com/darvilp/nutmerlin/releases/download/v$version/nutmerlin-core-$version.tar.gz" "$launcher")" -eq 1 ]
+	[ "$(grep -Fc 'bootstrap_curl=/usr/sbin/curl' "$launcher")" -eq 1 ]
+	run rg -n \
+		'eval|wget|ftp:|http:|[|][[:space:]]*(/bin/)?(sh|ash|bash)([[:space:]]|$)' \
+		"$launcher"
+
+	[ "$status" -eq 1 ]
+}
+
+@test "documented one-line install stages its launcher in a private unpredictable workspace" {
+	run rg -n 'NUTMERLIN_LAUNCHER="/tmp/nutmerlin-install-' "$REPOSITORY_ROOT/INSTALL.md"
+	[ "$status" -eq 1 ]
+	grep -F "mktemp -d '/tmp/nutmerlin-launcher.XXXXXX'" "$REPOSITORY_ROOT/INSTALL.md"
+	grep -F "trap 'rm -rf -- \"\$NUTMERLIN_BOOTSTRAP_DIR\"' EXIT" "$REPOSITORY_ROOT/INSTALL.md"
+}
+
 @test "listener probes fail closed when socket state cannot be inspected" {
 	empty_path=$NUTMERLIN_TEST_ROOT/empty-path
 	mkdir "$empty_path"

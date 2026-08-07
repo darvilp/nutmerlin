@@ -16,7 +16,7 @@ The client owns its local shutdown. The router remains monitoring-only and provi
 GitHub native dependencies are the blocking authority. Issue #2 remains the open umbrella and is not a blocking dependency.
 
 ```text
-#14 -> #12 -> #15 -> #17 -> #16 -> #18 -> #51 -> #23 -> #21 -> #52 -> #37 -> #38
+#14 -> #12 -> #15 -> #17 -> #16 -> #18 -> #51 -> #23 -> #21 -> #52 -> #53 -> #37 -> #38
 ```
 
 ### #14 — Real dummy NUT vertical slice
@@ -53,11 +53,15 @@ Close live surfaces, restore only attributable artifacts, and remove owned code/
 
 ### #21 — Package and update
 
-Build a deterministic core archive and implement local user-initiated update with one immediate backup and smoke recovery. No downloader or automatic check is part of v0.1.
+Build a deterministic core archive and implement local user-initiated update with one immediate backup and smoke recovery. The installed update path has no downloader or automatic check.
 
 ### #52 — Interactive AMTM-style management
 
 Add the conventional local menu for install/status/source/LAN/client/service/update/removal workflows, including the same default-No targeted Entware refresh. AMTM catalog submission remains outside v0.1.
+
+### #53 — Release-pinned fresh install
+
+Generate the versioned deterministic core archive, matching SHA-256 sidecar, and one release-specific fresh-install launcher. The launcher stages and verifies its pinned core below `/tmp` before entering the existing menu; it is not a generic downloader or a network-enabled installed updater.
 
 ### #37 — Exact hardware evidence
 

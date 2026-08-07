@@ -65,14 +65,16 @@ No router runtime dependency may be added without an accepted decision.
 
 ## 7. Development installation
 
-`make install DESTDIR=<private-root>` installs the exact layout without touching the host system. `make package` creates the byte-deterministic `dist/nutmerlin-core-dev.tar.gz`, its adjacent `.sha256` sidecar, and an internal fixed-inventory manifest. Verify the sidecar before extracting a fresh-install package:
+`make install DESTDIR=<private-root>` installs the exact layout without touching the host system. `make package` creates the byte-deterministic development archive `dist/nutmerlin-core-dev.tar.gz`, its adjacent `.sha256` sidecar, and an internal fixed-inventory manifest. `make release-artifacts` reads the bounded `VERSION` file and creates a deterministic versioned archive, matching sidecar, and release-specific `nutmerlin-install-VERSION.sh` launcher. It does not create a tag, publish a GitHub Release, or contact the network.
+
+Verify a local development sidecar before extracting its package:
 
 ```sh
 cd dist
 sha256sum -c nutmerlin-core-dev.tar.gz.sha256
 ```
 
-For the production-reference router, copy the archive through an existing administrator channel and run its local installer only with:
+For the production-reference router, either follow the release-pinned fresh-install path in `INSTALL.md` or copy the archive through an existing administrator channel and run its local installer only with:
 
 ```sh
 NUTMERLIN_ALLOW_PRODUCTION_ROUTER=1 ./install.sh
@@ -93,7 +95,7 @@ The package and installed core both provide the conventional local menu:
 
 From an installed menu, “Refresh required Entware NUT packages” performs the same six-root compatibility check and default-No confirmation. No other Entware maintenance is exposed.
 
-The installer never downloads NUTMerlin code or installs Entware itself. Preserve a separate router recovery path and inspect all proposed package, hook, and firewall changes before the first test.
+The package installer never downloads NUTMerlin code or installs Entware itself. The separately generated fresh-install launcher downloads only its pinned core archive, validates it before extraction, and then enters this same menu. Preserve a separate router recovery path and inspect all proposed package, hook, and firewall changes before the first test.
 
 An installed administrator can apply a copied local package and adjacent sidecar with:
 

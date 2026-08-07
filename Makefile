@@ -1,4 +1,4 @@
-.PHONY: bootstrap install lint test-unit test test-nut test-security docs-check package
+.PHONY: bootstrap install lint test-unit test test-nut test-security docs-check package release-artifacts
 
 bootstrap:
 	@tools/project-checks.sh bootstrap
@@ -26,3 +26,6 @@ docs-check:
 
 package:
 	@tools/project-checks.sh package
+
+release-artifacts:
+	@tools/project-checks.sh release-artifacts

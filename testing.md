@@ -27,6 +27,8 @@ Test behavior through the CLI, generated configuration, installer destination ro
 - Scripted local-menu navigation, confirmation defaults, literal-value forwarding, end-of-input safety, and once-only secret display.
 - Recovery locking and bounded retry states.
 - Archive inventory and path safety.
+- Deterministic release-artifact generation and the generated fresh-install launcher as an external administrator would invoke it.
+- Fresh-install download failure, truncation, digest mismatch, unsafe inventory/type/mode refusal, internal-manifest failure, foreign-state refusal, menu quit/end-of-input, cleanup, and the valid path into the existing menu.
 
 Expected values shall be fixed specification examples, not values recomputed by the production implementation.
 
@@ -55,6 +57,7 @@ Use isolated fake `/jffs`, `/opt`, and `/tmp` roots plus boundary shims for `nvr
 - Service death, failed restart, pause, probe, and recovery.
 - Exact firewall insertion/removal and unrelated-rule preservation.
 - Disable, repair, update failure/recovery, and uninstall.
+- Fresh-install launcher behavior through an isolated private `/tmp` root and harmless curl adapter; tests may not contact GitHub or the host network.
 
 Host shims must make writes to real `/jffs`, `/opt`, firewall, cron, or processes impossible.
 

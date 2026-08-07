@@ -21,6 +21,7 @@ The router reports UPS state and manages the NUT service. It does not centrally 
 - Integrates with Merlin lifecycle, mount, firewall, and shutdown hooks.
 - Provides stable human-readable and JSON CLI status and diagnostics.
 - Provides one local interactive menu for installation and routine administration.
+- Provides a release-pinned fresh-install launcher that verifies its core before opening that menu.
 - Exposes the real NUT source only to one explicit trusted IPv4 scope.
 - Creates a unique restricted `upsmon secondary` credential for each client.
 - Supports user-initiated disable, repair, update, and conservative uninstall.
@@ -37,7 +38,7 @@ nutmerlin uninstall
 
 Disable retains configuration and credentials. Repair reconstructs only unambiguous owned modes, selectors, hook blocks, scheduling, and service state. Update requires an adjacent `.sha256` sidecar, validates the fixed internal manifest, uses one immediate temporary backup, and performs no download or Entware operation. Uninstall requires attributable `/opt` state, removes only verified NUTMerlin artifacts, and always retains every Entware package.
 
-Run `./bin/nutmerlin menu` from an unpacked package to install, or run `/jffs/addons/nutmerlin/bin/nutmerlin menu` after installation. The fixed menu delegates to the same CLI and keeps confirmation prompts for consequential changes. Its Entware option checks and, only after an explicit default-No confirmation, refreshes the six required NUT package roots; it does not perform general Entware maintenance.
+For a published alpha, `INSTALL.md` gives the version-pinned one-line download and launch command. The launcher downloads its matching core into private temporary storage, verifies it, and opens the same local menu; it makes no persistent change by itself. For a copied or unpacked package, run `./bin/nutmerlin menu`; after installation, run `/jffs/addons/nutmerlin/bin/nutmerlin menu`. The fixed menu delegates to the same CLI and keeps confirmation prompts for consequential changes. Its Entware option checks and, only after an explicit default-No confirmation, refreshes the six required NUT package roots; it does not perform general Entware maintenance.
 
 ## Deliberate exclusions
 
@@ -45,7 +46,7 @@ v0.1 has no router-side outage policy, remote shutdown executor, action journal,
 
 ## Current status
 
-The owned dummy core, Merlin lifecycle, uniquely identified USB source, exact trusted-LAN exposure, restricted secondary-client credentials, owned-only lifecycle management, deterministic package, local user-initiated update, and interactive menu are implemented and covered by host-safe tests. Exact router/UPS evidence remains on the v0.1 track in `plan.md`. No physical-UPS claim has yet been made. This repository is development software and not a published release.
+The owned dummy core, Merlin lifecycle, uniquely identified USB source, exact trusted-LAN exposure, restricted secondary-client credentials, owned-only lifecycle management, deterministic package, local user-initiated update, interactive menu, and release-pinned fresh-install path are implemented and covered by host-safe tests. Exact router/UPS evidence remains on the v0.1 track in `plan.md`. No physical-UPS claim has yet been made. This repository is development software and not a published release.
 
 ## Development
 
@@ -56,6 +57,7 @@ make bootstrap
 make test
 make test-nut
 make package
+make release-artifacts
 ```
 
 See `development.md` and `testing.md`. Real-router modification is always manually gated with `NUTMERLIN_ALLOW_PRODUCTION_ROUTER=1`.
