@@ -27,25 +27,23 @@ ownership_layout_parent_is_safe() {
 	fi
 }
 
-ownership_verify_code_root() {
+ownership_verify_code_contents() {
 	verified_code_root=$1
 	ownership_expected_uid=$(id -u)
 	[ -d "$verified_code_root" ] && [ ! -L "$verified_code_root" ] || return 1
-	[ "$(stat -c '%a' "$verified_code_root")" = 755 ] || return 1
 	[ "$(stat -c '%u' "$verified_code_root")" = "$ownership_expected_uid" ] || return 1
 	ownership_entry_count_is "$verified_code_root" 9 || return 1
 	for owned_code_directory in bin lib share share/dummy; do
 		[ -d "$verified_code_root/$owned_code_directory" ] &&
 			[ ! -L "$verified_code_root/$owned_code_directory" ] || return 1
-		[ "$(stat -c '%a' "$verified_code_root/$owned_code_directory")" = 755 ] || return 1
 		[ "$(stat -c '%u' "$verified_code_root/$owned_code_directory")" = "$ownership_expected_uid" ] || return 1
 	done
 	ownership_entry_count_is "$verified_code_root/bin" 1 || return 1
-	ownership_entry_count_is "$verified_code_root/lib" 11 || return 1
+	ownership_entry_count_is "$verified_code_root/lib" 12 || return 1
 	ownership_entry_count_is "$verified_code_root/share" 1 || return 1
 	ownership_entry_count_is "$verified_code_root/share/dummy" 1 || return 1
 	for owned_code_file in VERSION bin/nutmerlin \
-		lib/client.sh lib/configuration.sh lib/entware.sh lib/hooks.sh lib/lifecycle.sh lib/ownership.sh lib/paths.sh \
+		lib/client.sh lib/configuration.sh lib/entware.sh lib/hooks.sh lib/lifecycle.sh lib/management.sh lib/ownership.sh lib/paths.sh \
 		lib/platform.sh lib/result.sh lib/service.sh lib/status.sh \
 		share/dummy/cyberpower.dev installation.id enabled entware.tsv hooks.tsv owned-files; do
 		[ -f "$verified_code_root/$owned_code_file" ] &&
@@ -53,18 +51,7 @@ ownership_verify_code_root() {
 		[ "$(stat -c '%h' "$verified_code_root/$owned_code_file")" = 1 ] || return 1
 		[ "$(stat -c '%u' "$verified_code_root/$owned_code_file")" = "$ownership_expected_uid" ] || return 1
 	done
-	[ "$(find "$verified_code_root" -type f | wc -l)" -eq 19 ] || return 1
-	[ "$(stat -c '%a' "$verified_code_root/installation.id")" = 600 ] || return 1
-	[ "$(stat -c '%a' "$verified_code_root/enabled")" = 600 ] || return 1
-	[ "$(stat -c '%a' "$verified_code_root/entware.tsv")" = 600 ] || return 1
-	[ "$(stat -c '%a' "$verified_code_root/hooks.tsv")" = 600 ] || return 1
-	[ "$(stat -c '%a' "$verified_code_root/owned-files")" = 600 ] || return 1
-	[ "$(stat -c '%a' "$verified_code_root/bin/nutmerlin")" = 755 ] || return 1
-	[ "$(stat -c '%a' "$verified_code_root/VERSION")" = 644 ] || return 1
-	[ "$(stat -c '%a' "$verified_code_root/share/dummy/cyberpower.dev")" = 644 ] || return 1
-	for owned_library in "$verified_code_root"/lib/*.sh; do
-		[ "$(stat -c '%a' "$owned_library")" = 644 ] || return 1
-	done
+	[ "$(find "$verified_code_root" -type f | wc -l)" -eq 20 ] || return 1
 	case $(cat "$verified_code_root/enabled") in
 		0 | 1) ;;
 		*) return 1 ;;
@@ -79,6 +66,7 @@ lib/configuration.sh
 lib/entware.sh
 lib/hooks.sh
 lib/lifecycle.sh
+lib/management.sh
 lib/ownership.sh
 lib/paths.sh
 lib/platform.sh
@@ -87,6 +75,34 @@ lib/service.sh
 lib/status.sh
 share/dummy/cyberpower.dev' ] || return 1
 	(cd "$verified_code_root" && sha256sum -c owned-files >/dev/null 2>&1) || return 1
+}
+
+ownership_verify_code_modes() {
+	verified_code_root=$1
+	[ "$(stat -c '%a' "$verified_code_root")" = 755 ] || return 1
+	for owned_code_directory in bin lib share share/dummy; do
+		[ "$(stat -c '%a' "$verified_code_root/$owned_code_directory")" = 755 ] || return 1
+	done
+	for private_code_file in installation.id enabled entware.tsv hooks.tsv owned-files; do
+		[ "$(stat -c '%a' "$verified_code_root/$private_code_file")" = 600 ] || return 1
+	done
+	[ "$(stat -c '%a' "$verified_code_root/bin/nutmerlin")" = 755 ] || return 1
+	[ "$(stat -c '%a' "$verified_code_root/VERSION")" = 644 ] || return 1
+	[ "$(stat -c '%a' "$verified_code_root/share/dummy/cyberpower.dev")" = 644 ] || return 1
+	for owned_library in "$verified_code_root"/lib/*.sh; do
+		[ "$(stat -c '%a' "$owned_library")" = 644 ] || return 1
+	done
+}
+
+ownership_verify_code_payload() {
+	verified_code_root=$1
+	ownership_verify_code_contents "$verified_code_root" || return 1
+	ownership_verify_code_modes "$verified_code_root"
+}
+
+ownership_verify_code_root() {
+	verified_code_root=$1
+	ownership_verify_code_payload "$verified_code_root" || return 1
 	hooks_verify_all "$verified_code_root" || return 1
 }
 
@@ -228,6 +244,10 @@ ownership_check_live_foreign_state() {
 		# service_pid_record_read exports the parsed record fields.
 		# shellcheck disable=SC2154
 		owned_server_pid=$recorded_pid
+		# shellcheck disable=SC2154
+		owned_server_set_id=$recorded_set_id
+		# shellcheck disable=SC2154
+		owned_server_epoch=$recorded_epoch
 		service_pid_is_owned "$owned_driver_record" "$owned_driver_role" || {
 			ownership_refuse 'active NUT driver process identity is ambiguous'
 			return $?
@@ -235,6 +255,13 @@ ownership_check_live_foreign_state() {
 		service_pid_record_read "$owned_driver_record" || return 78
 		# shellcheck disable=SC2154
 		owned_driver_pid=$recorded_pid
+		owned_driver_set_id=$recorded_set_id
+		owned_driver_epoch=$recorded_epoch
+		if [ "$owned_server_set_id" != "$owned_driver_set_id" ] ||
+			[ "$owned_server_epoch" != "$owned_driver_epoch" ]; then
+			ownership_refuse 'active NUT process generation is ambiguous'
+			return $?
+		fi
 		printf '%s\n' "$nut_process_snapshot" | awk \
 			-v server_pid="$owned_server_pid" -v driver_pid="$owned_driver_pid" '
 			{
@@ -250,7 +277,23 @@ ownership_check_live_foreign_state() {
 			ownership_refuse 'an additional foreign NUT process is active'
 			return $?
 		}
-		if ! service_resolve_current >/dev/null 2>&1 ||
+		if [ "${NUTMERLIN_ALLOW_MISSING_ACTIVE_CONFIG:-0}" = 1 ]; then
+			SERVICE_LAN_ADDRESS=${PLATFORM_FIREWALL_OWNED_ADDRESS:--}
+			SERVICE_LAN_CIDR=${PLATFORM_FIREWALL_OWNED_CIDR:--}
+			if [ "$owned_driver_role" = dummy ] && [ "$SERVICE_LAN_ADDRESS" != - ]; then
+				ownership_refuse 'dummy source has unexpected external firewall state'
+				return $?
+			fi
+			export SERVICE_LAN_ADDRESS SERVICE_LAN_CIDR
+			service_listener_is_expected || {
+				ownership_refuse 'owned NUT listener state cannot be verified without storage'
+				return $?
+			}
+			return 0
+		fi
+		NUTMERLIN_ACTIVE_CONFIG=$NUTMERLIN_OPT_ROOT/etc/nutmerlin/config/sets/$owned_server_set_id
+		export NUTMERLIN_ACTIVE_CONFIG
+		if ! configuration_validate_set "$NUTMERLIN_ACTIVE_CONFIG" >/dev/null 2>&1 ||
 			! service_load_active_profile >/dev/null 2>&1; then
 			ownership_refuse 'active NUT network profile cannot be verified'
 			return $?

@@ -30,6 +30,7 @@ No input may become shell code, an environment assignment, redirection, pipeline
 - Put high-frequency and retry state in `/tmp`.
 - Missing/read-only/replaced `/opt` closes live exposure and does not authorize adoption or reconstruction.
 - Complete uninstall requires positive ownership and present storage; uncertainty retains data rather than deleting foreign state.
+- Missing storage permits code-root-verified disable and exact removal of attributable live surfaces, but not deletion of residual `/opt` data.
 
 ## 4. Source safety
 

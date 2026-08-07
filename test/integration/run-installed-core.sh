@@ -9,9 +9,9 @@ installed_root=
 integration_tab=$(printf '\t')
 
 case $test_scenario in
-	service | rollback | lifecycle | client) ;;
+	service | rollback | lifecycle | client | management) ;;
 	*)
-		printf '%s\n' 'usage: run-installed-core.sh service|rollback|lifecycle|client' >&2
+		printf '%s\n' 'usage: run-installed-core.sh service|rollback|lifecycle|client|management' >&2
 		exit 64
 		;;
 esac
@@ -211,6 +211,42 @@ printf '%s\n' "$upsc_observation" | grep -q '^ups.status: OL$'
 
 repeat_install_output=$(make --no-print-directory -C "$repository_root" install DESTDIR="$installed_root")
 [ "$repeat_install_output" = 'NUTMerlin already installed: owned state is complete' ]
+
+if [ "$test_scenario" = management ]; then
+	cp "$installed_root/opt/lib/opkg/status" "$installed_root/opkg-status.before"
+	invoke_cli disable >"$installed_root/disable.log"
+	[ "$(cat "$installed_root/jffs/addons/nutmerlin/enabled")" = 0 ]
+	[ ! -e "$installed_root/platform/cru.tsv" ]
+	[ ! -e "$installed_root/tmp/nutmerlin/run/upsd.pid" ]
+	[ ! -e "$installed_root/tmp/nutmerlin/run/dummy-ups.pid" ]
+	if ss -ltn | awk 'NR > 1 { print $4 }' | grep -Eq '(^|:)3493$'; then
+		exit 1
+	fi
+	invoke_cli enable >"$installed_root/enable.log"
+	"$installed_root/opt/bin/upsc" dummy@127.0.0.1 ups.status 2>/dev/null | grep -qx OL
+	management_config_root=$installed_root/opt/etc/nutmerlin/config
+	management_set_id=$(cat "$management_config_root/current")
+	rm "$management_config_root/current"
+	rm "$installed_root/platform/cru.tsv"
+	chmod 600 "$installed_root/jffs/addons/nutmerlin/lib/status.sh"
+	: >"$installed_root/jffs/scripts/post-mount"
+	chmod 755 "$installed_root/jffs/scripts/post-mount"
+	invoke_cli repair >"$installed_root/repair.log"
+	[ "$(cat "$management_config_root/current")" = "$management_set_id" ]
+	[ -f "$installed_root/platform/cru.tsv" ]
+	[ "$(stat -c '%a' "$installed_root/jffs/addons/nutmerlin/lib/status.sh")" = 644 ]
+	"$installed_root/opt/bin/upsc" dummy@127.0.0.1 ups.status 2>/dev/null | grep -qx OL
+	invoke_cli uninstall >"$installed_root/uninstall.log"
+	[ ! -e "$installed_root/jffs/addons/nutmerlin" ]
+	[ ! -e "$installed_root/opt/etc/nutmerlin" ]
+	[ ! -e "$installed_root/tmp/nutmerlin" ]
+	cmp "$installed_root/opkg-status.before" "$installed_root/opt/lib/opkg/status"
+	if ss -ltn | awk 'NR > 1 { print $4 }' | grep -Eq '(^|:)3493$'; then
+		exit 1
+	fi
+	printf '%s\n' 'management lifecycle: disable=closed enable=running repair=running uninstall=owned-only'
+	exit 0
+fi
 
 if [ "$test_scenario" = lifecycle ]; then
 	cru_state=$installed_root/platform/cru.tsv

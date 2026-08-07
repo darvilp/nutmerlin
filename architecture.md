@@ -157,7 +157,7 @@ The development installer supports an isolated destination root. Router installa
 
 Update accepts a local fixed-format archive and requires an adjacent `<archive>.sha256` sidecar containing the archive digest and basename. After verifying that digest, it extracts into one private sibling code directory and verifies the internal fixed-inventory per-file checksum manifest. It then stops exposure/services, renames the current code root to one temporary backup, activates the candidate, and performs a smoke check. It immediately restores on failure and deletes the backup on success.
 
-Repair is idempotent for complete owned evidence. It does not reconstruct ambiguous ownership. Disable retains data but removes all live surfaces. Complete uninstall requires the owned `/opt` root to be present and removes only verified owned objects; Entware packages and foreign objects remain.
+Repair is idempotent for complete consistent ownership. It can restore known modes, an unambiguous current/last-good selector, exact hook blocks, the periodic job, volatile directories, and the intended enabled or disabled service state; it does not reconstruct modified content or ambiguous ownership. Disable retains data but removes all live surfaces, including attributable firewall state when `/opt` is unavailable. Complete uninstall requires the owned `/opt` root to be present and removes only verified owned objects; Entware packages and foreign objects remain.
 
 ## 10. Failure invariants
 

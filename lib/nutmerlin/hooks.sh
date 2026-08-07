@@ -93,6 +93,147 @@ firewall-start' ] || return 1
 	done
 }
 
+hooks_classify_one() {
+	classified_hook_root=$1
+	classified_hook_name=$2
+	classified_hook_id=$3
+	classified_code_root=$4
+	classified_hook_path=$classified_hook_root/$classified_hook_name
+	HOOKS_STATE=missing
+	if [ ! -e "$classified_hook_path" ] && [ ! -L "$classified_hook_path" ]; then
+		export HOOKS_STATE
+		return 0
+	fi
+	[ -f "$classified_hook_path" ] && [ ! -L "$classified_hook_path" ] || return 78
+	[ "$(stat -c '%h' "$classified_hook_path")" = 1 ] || return 78
+	[ "$(stat -c '%u' "$classified_hook_path")" = "$(id -u)" ] || return 78
+	classified_hook_mode=$(stat -c '%a' "$classified_hook_path")
+	case $classified_hook_mode in
+		[1357][0145][0145]) ;;
+		*) return 78 ;;
+	esac
+	if hooks_verify_one "$classified_hook_root" "$classified_hook_name" \
+		"$classified_hook_id" "$classified_code_root"; then
+		HOOKS_STATE=exact
+		export HOOKS_STATE
+		return 0
+	fi
+	if grep -E '(^|[^[:alnum:]_-])(upsd|upsdrvctl|dummy-ups|usbhid-ups|NUT_CONFPATH)([^[:alnum:]_-]|$)' \
+		"$classified_hook_path" >/dev/null 2>&1 ||
+		grep -F 'NUTMerlin managed block:' "$classified_hook_path" >/dev/null 2>&1; then
+		return 78
+	fi
+	export HOOKS_STATE
+}
+
+hooks_repairable_all() {
+	repairable_hook_code_root=$1
+	repairable_hook_root=$NUTMERLIN_JFFS_ROOT/scripts
+	if [ ! -e "$repairable_hook_root" ] && [ ! -L "$repairable_hook_root" ]; then
+		return 0
+	fi
+	[ -d "$repairable_hook_root" ] && [ ! -L "$repairable_hook_root" ] || return 78
+	repairable_hook_id=$(cat "$repairable_hook_code_root/installation.id")
+	ownership_id_is_valid "$repairable_hook_id" || return 78
+	for repairable_hook_name in $hooks_names; do
+		hooks_classify_one "$repairable_hook_root" "$repairable_hook_name" \
+			"$repairable_hook_id" "$repairable_hook_code_root" || return 78
+	done
+}
+
+hooks_repair_all() (
+	repair_hook_code_root=$1
+	repair_hook_root=$NUTMERLIN_JFFS_ROOT/scripts
+	repair_hook_id=$(cat "$repair_hook_code_root/installation.id")
+	hooks_repairable_all "$repair_hook_code_root" || return $?
+	if [ ! -e "$repair_hook_root" ]; then
+		ownership_layout_parent_is_safe "$NUTMERLIN_JFFS_ROOT" || return 78
+		mkdir -m 755 "$repair_hook_root" || return 75
+	fi
+	repair_hook_scratch=$(mktemp -d "$NUTMERLIN_TMP_ROOT/.nutmerlin-hook-repair.XXXXXX") || return 75
+	repair_hook_candidate=
+	trap 'rm -rf -- "$repair_hook_scratch"; [ -z "$repair_hook_candidate" ] || rm -f -- "$repair_hook_candidate"' \
+		EXIT HUP INT TERM
+	for repair_hook_name in $hooks_names; do
+		hooks_classify_one "$repair_hook_root" "$repair_hook_name" "$repair_hook_id" \
+			"$repair_hook_code_root" || return 78
+		[ "$HOOKS_STATE" = missing ] || continue
+		repair_hook_path=$repair_hook_root/$repair_hook_name
+		repair_hook_candidate=$repair_hook_root/.nutmerlin-repair-$repair_hook_name-$repair_hook_id
+		[ ! -e "$repair_hook_candidate" ] && [ ! -L "$repair_hook_candidate" ] || return 78
+		if [ -e "$repair_hook_path" ]; then
+			repair_hook_mode=$(stat -c '%a' "$repair_hook_path")
+			cp "$repair_hook_path" "$repair_hook_scratch/$repair_hook_name.original" || return 75
+			cp "$repair_hook_path" "$repair_hook_candidate" || return 75
+			[ ! -s "$repair_hook_candidate" ] || printf '\n' >>"$repair_hook_candidate"
+		else
+			repair_hook_mode=755
+			: >"$repair_hook_candidate"
+		fi
+		hooks_render_block "$repair_hook_name" "$repair_hook_id" "$repair_hook_code_root" \
+			>>"$repair_hook_candidate"
+		chmod "$repair_hook_mode" "$repair_hook_candidate" || return 75
+		if [ -e "$repair_hook_path" ]; then
+			hooks_file_matches_snapshot "$repair_hook_path" \
+				"$repair_hook_scratch/$repair_hook_name.original" "$repair_hook_mode" || return 78
+		elif [ -e "$repair_hook_path" ] || [ -L "$repair_hook_path" ]; then
+			return 78
+		fi
+		mv "$repair_hook_candidate" "$repair_hook_path" || return 75
+		repair_hook_candidate=
+		hooks_verify_one "$repair_hook_root" "$repair_hook_name" "$repair_hook_id" \
+			"$repair_hook_code_root" || return 78
+	done
+	hooks_verify_all "$repair_hook_code_root"
+)
+
+hooks_remove_all() (
+	remove_hook_code_root=$1
+	remove_hook_root=$NUTMERLIN_JFFS_ROOT/scripts
+	remove_hook_id=$(cat "$remove_hook_code_root/installation.id")
+	hooks_repairable_all "$remove_hook_code_root" || return $?
+	remove_hook_scratch=$(mktemp -d "$NUTMERLIN_TMP_ROOT/.nutmerlin-hook-remove.XXXXXX") || return 75
+	remove_hook_candidate=
+	trap 'rm -rf -- "$remove_hook_scratch"; [ -z "$remove_hook_candidate" ] || rm -f -- "$remove_hook_candidate"' \
+		EXIT HUP INT TERM
+	for remove_hook_name in $hooks_names; do
+		hooks_classify_one "$remove_hook_root" "$remove_hook_name" "$remove_hook_id" \
+			"$remove_hook_code_root" || return 78
+		[ "$HOOKS_STATE" = exact ] || continue
+		remove_hook_path=$remove_hook_root/$remove_hook_name
+		remove_hook_mode=$(stat -c '%a' "$remove_hook_path")
+		remove_hook_snapshot=$remove_hook_scratch/$remove_hook_name.original
+		remove_hook_block=$remove_hook_scratch/$remove_hook_name.block
+		cp "$remove_hook_path" "$remove_hook_snapshot" || return 75
+		hooks_render_block "$remove_hook_name" "$remove_hook_id" "$remove_hook_code_root" \
+			>"$remove_hook_block"
+		remove_hook_size=$(wc -c <"$remove_hook_path")
+		remove_block_size=$(wc -c <"$remove_hook_block")
+		[ "$remove_hook_size" -ge "$remove_block_size" ] || return 78
+		remove_prefix_size=$((remove_hook_size - remove_block_size))
+		remove_original_size=$remove_prefix_size
+		if [ "$remove_prefix_size" -gt 0 ]; then
+			remove_original_size=$((remove_prefix_size - 1))
+		fi
+		remove_hook_candidate=$remove_hook_root/.nutmerlin-remove-$remove_hook_name-$remove_hook_id
+		[ ! -e "$remove_hook_candidate" ] && [ ! -L "$remove_hook_candidate" ] || return 78
+		if [ "$remove_original_size" -eq 0 ]; then
+			: >"$remove_hook_candidate"
+		else
+			dd if="$remove_hook_path" of="$remove_hook_candidate" bs=1 \
+				count="$remove_original_size" 2>/dev/null || return 75
+		fi
+		chmod "$remove_hook_mode" "$remove_hook_candidate" || return 75
+		hooks_file_matches_snapshot "$remove_hook_path" "$remove_hook_snapshot" \
+			"$remove_hook_mode" || return 78
+		mv "$remove_hook_candidate" "$remove_hook_path" || return 75
+		remove_hook_candidate=
+		hooks_classify_one "$remove_hook_root" "$remove_hook_name" "$remove_hook_id" \
+			"$remove_hook_code_root" || return 78
+		[ "$HOOKS_STATE" = missing ] || return 78
+	done
+)
+
 hooks_file_matches_snapshot() {
 	hooks_live_path=$1
 	hooks_snapshot_path=$2
@@ -134,7 +275,7 @@ hooks_install_all() {
 			[ "$(stat -c '%u' "$installed_hook_path")" = "$(id -u)" ] || return 78
 			installed_hook_mode=$(stat -c '%a' "$installed_hook_path")
 			case $installed_hook_mode in
-				[1357]??) ;;
+				[1357][0145][0145]) ;;
 				*) return 78 ;;
 			esac
 			cp "$installed_hook_path" "$NUTMERLIN_HOOK_BACKUP_ROOT/$installed_hook_name"

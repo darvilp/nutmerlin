@@ -24,13 +24,24 @@ The router reports UPS state and manages the NUT service. It does not centrally 
 - Creates a unique restricted `upsmon secondary` credential for each client.
 - Supports user-initiated disable, repair, update, and conservative uninstall.
 
+The local lifecycle-management commands are:
+
+```text
+nutmerlin enable
+nutmerlin disable
+nutmerlin repair
+nutmerlin uninstall
+```
+
+Disable retains configuration and credentials. Repair reconstructs only unambiguous owned modes, selectors, hook blocks, scheduling, and service state. Uninstall requires attributable `/opt` state, removes only verified NUTMerlin artifacts, and always retains every Entware package.
+
 ## Deliberate exclusions
 
 v0.1 has no router-side outage policy, remote shutdown executor, action journal, FSD workflow, writable UPS administration, output control, WebUI, webhook, MQTT, SSH, WinRM, Redfish, support bundle, configuration import/export, or broad hardware matrix.
 
 ## Current status
 
-The owned dummy core, Merlin lifecycle, uniquely identified USB source, exact trusted-LAN exposure, and restricted secondary-client credentials are implemented and covered by host-safe tests. Conservative removal, fetched user-initiated update, the interactive menu, and exact router/UPS evidence remain on the v0.1 track in `plan.md`. No physical-UPS claim has yet been made. This repository is development software and not a published release.
+The owned dummy core, Merlin lifecycle, uniquely identified USB source, exact trusted-LAN exposure, restricted secondary-client credentials, and conservative owned-only lifecycle management are implemented and covered by host-safe tests. Fetched user-initiated update, the interactive menu, and exact router/UPS evidence remain on the v0.1 track in `plan.md`. No physical-UPS claim has yet been made. This repository is development software and not a published release.
 
 ## Development
 

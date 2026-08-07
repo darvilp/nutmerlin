@@ -361,6 +361,26 @@ case $command_name in
 				;;
 		esac
 		;;
+	enable | disable | repair | uninstall)
+		[ "$#" -eq 0 ] || usage
+		management_action=$command_name
+		for management_library in paths entware configuration hooks platform ownership service lifecycle management result; do
+			# shellcheck disable=SC1090
+			. "$library_dir/$management_library.sh"
+		done
+		paths_initialize
+		case $management_action in
+			enable) management_enable ;;
+			disable) management_disable ;;
+			repair) management_repair ;;
+			uninstall) management_uninstall ;;
+			*)
+				printf '%s is not implemented\n' "$management_action" >&2
+				exit 69
+				;;
+		esac
+		result_emit "$management_action" human ok success "$MANAGEMENT_MESSAGE"
+		;;
 	hook)
 		[ "$#" -ge 1 ] || usage
 		hook_event=$1

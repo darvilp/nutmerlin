@@ -17,3 +17,10 @@ setup() {
 	[ "$status" -eq 0 ]
 	[ "$output" = 'standard secondary authentication: correct=accepted wrong=rejected revoked=rejected' ]
 }
+
+@test "real NUT survives disable enable and repair before conservative uninstall" {
+	run "$repository_root/test/integration/run-installed-core.sh" management
+
+	[ "$status" -eq 0 ]
+	[ "$output" = 'management lifecycle: disable=closed enable=running repair=running uninstall=owned-only' ]
+}

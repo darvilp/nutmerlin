@@ -346,6 +346,27 @@ platform_cru_listing_state() {
 	printf '%s\n' "$platform_listing" | grep -Fx "$platform_expected_line" >/dev/null || return 78
 }
 
+platform_cru_owned_or_absent() {
+	if [ "${NUTMERLIN_ENABLE_TEST_ADAPTERS:-0}" = 1 ]; then
+		if platform_cru_adapter_state; then
+			return 0
+		else
+			platform_cru_observed=$?
+			[ "$platform_cru_observed" -eq 1 ] && return 0
+			return "$platform_cru_observed"
+		fi
+	fi
+	command -v cru >/dev/null 2>&1 || return 69
+	platform_cru_listing=$(cru l 2>/dev/null) || return 75
+	if platform_cru_listing_state "$platform_cru_listing"; then
+		return 0
+	else
+		platform_cru_observed=$?
+		[ "$platform_cru_observed" -eq 1 ] && return 0
+		return "$platform_cru_observed"
+	fi
+}
+
 platform_cru_ensure() {
 	periodic_command=$(platform_cru_command) || return $?
 	if [ "${NUTMERLIN_ENABLE_TEST_ADAPTERS:-0}" = 1 ]; then
@@ -631,6 +652,84 @@ platform_firewall_close() {
 	if iptables -S "$platform_firewall_chain" >/dev/null 2>&1; then
 		return 75
 	fi
+}
+
+platform_firewall_owned_state() {
+	PLATFORM_FIREWALL_OWNED_ADDRESS=-
+	PLATFORM_FIREWALL_OWNED_CIDR=-
+	if [ "${NUTMERLIN_ENABLE_TEST_ADAPTERS:-0}" = 1 ]; then
+		platform_firewall_path=$NUTMERLIN_TEST_ROOT/platform/firewall.tsv
+		if [ ! -e "$platform_firewall_path" ] && [ ! -L "$platform_firewall_path" ]; then
+			export PLATFORM_FIREWALL_OWNED_ADDRESS PLATFORM_FIREWALL_OWNED_CIDR
+			return 1
+		fi
+		[ -f "$platform_firewall_path" ] && [ ! -L "$platform_firewall_path" ] || return 78
+		[ "$(stat -c '%a' "$platform_firewall_path")" = 600 ] || return 78
+		[ "$(stat -c '%h' "$platform_firewall_path")" = 1 ] || return 78
+		[ "$(stat -c '%u' "$platform_firewall_path")" = "$(id -u)" ] || return 78
+		[ "$(wc -l <"$platform_firewall_path")" -eq 6 ] || return 78
+		platform_firewall_tab=$(printf '\t')
+		platform_firewall_record_id=$(awk -F "$platform_firewall_tab" \
+			'$1 == "installation_id" && NF == 2 { print $2; count++ } END { if (count != 1) exit 1 }' \
+			"$platform_firewall_path") || return 78
+		platform_firewall_code_id=$(cat \
+			"$NUTMERLIN_JFFS_ROOT/addons/nutmerlin/installation.id" 2>/dev/null || :)
+		[ "$platform_firewall_record_id" = "$platform_firewall_code_id" ] || return 78
+		platform_firewall_address=$(awk -F "$platform_firewall_tab" \
+			'$1 == "jump" && NF == 8 { print $5; count++ } END { if (count != 1) exit 1 }' \
+			"$platform_firewall_path") || return 78
+		platform_firewall_cidr=$(awk -F "$platform_firewall_tab" \
+			'$1 == "allow" && NF == 6 { print $2; count++ } END { if (count != 1) exit 1 }' \
+			"$platform_firewall_path") || return 78
+		platform_firewall_adapter_state "$platform_firewall_address" \
+			"$platform_firewall_cidr" || return $?
+		PLATFORM_FIREWALL_OWNED_ADDRESS=$platform_firewall_address
+		PLATFORM_FIREWALL_OWNED_CIDR=$platform_firewall_cidr
+		export PLATFORM_FIREWALL_OWNED_ADDRESS PLATFORM_FIREWALL_OWNED_CIDR
+		return 0
+	fi
+
+	command -v iptables >/dev/null 2>&1 || return 69
+	platform_firewall_all_rules=$(iptables -S 2>/dev/null) || return 69
+	platform_firewall_reference_total=$(printf '%s\n' "$platform_firewall_all_rules" |
+		platform_firewall_reference_count)
+	if ! platform_firewall_chain_rules=$(iptables -S "$platform_firewall_chain" 2>/dev/null); then
+		[ "$platform_firewall_reference_total" -eq 0 ] || return 78
+		export PLATFORM_FIREWALL_OWNED_ADDRESS PLATFORM_FIREWALL_OWNED_CIDR
+		return 1
+	fi
+	[ "$platform_firewall_reference_total" -eq 1 ] || return 78
+	platform_firewall_allow_rule=$(printf '%s\n' "$platform_firewall_chain_rules" | sed -n '2p')
+	platform_firewall_address=$(printf '%s\n' "$platform_firewall_allow_rule" |
+		awk '{ for (field = 1; field < NF; field++) if ($field == "-d") { print $(field + 1); count++ } } END { if (count != 1) exit 1 }') || return 78
+	platform_firewall_cidr=$(printf '%s\n' "$platform_firewall_allow_rule" |
+		awk '{ for (field = 1; field < NF; field++) if ($field == "-s") { print $(field + 1); count++ } } END { if (count != 1) exit 1 }') || return 78
+	platform_firewall_iptables_state "$platform_firewall_address" "$platform_firewall_cidr" || return $?
+	PLATFORM_FIREWALL_OWNED_ADDRESS=$platform_firewall_address
+	PLATFORM_FIREWALL_OWNED_CIDR=$platform_firewall_cidr
+	export PLATFORM_FIREWALL_OWNED_ADDRESS PLATFORM_FIREWALL_OWNED_CIDR
+}
+
+platform_firewall_owned_or_absent() {
+	if platform_firewall_owned_state; then
+		return 0
+	else
+		platform_firewall_observed=$?
+		[ "$platform_firewall_observed" -eq 1 ] && return 0
+		return "$platform_firewall_observed"
+	fi
+}
+
+platform_firewall_remove_owned() {
+	if platform_firewall_owned_state; then
+		:
+	else
+		platform_firewall_observed=$?
+		[ "$platform_firewall_observed" -eq 1 ] && return 0
+		return "$platform_firewall_observed"
+	fi
+	platform_firewall_close "$PLATFORM_FIREWALL_OWNED_ADDRESS" \
+		"$PLATFORM_FIREWALL_OWNED_CIDR"
 }
 
 platform_firewall_is_absent() {
