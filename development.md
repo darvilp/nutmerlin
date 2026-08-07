@@ -65,7 +65,12 @@ No router runtime dependency may be added without an accepted decision.
 
 ## 7. Development installation
 
-`make install DESTDIR=<private-root>` installs the exact layout without touching the host system. `make package` creates a local deterministic archive containing the same files.
+`make install DESTDIR=<private-root>` installs the exact layout without touching the host system. `make package` creates the byte-deterministic `dist/nutmerlin-core-dev.tar.gz`, its adjacent `.sha256` sidecar, and an internal fixed-inventory manifest. Verify the sidecar before extracting a fresh-install package:
+
+```sh
+cd dist
+sha256sum -c nutmerlin-core-dev.tar.gz.sha256
+```
 
 For the production-reference router, copy the archive through an existing administrator channel and run its local installer only with:
 
@@ -80,6 +85,15 @@ NUTMERLIN_ALLOW_PRODUCTION_ROUTER=1 ./install.sh --install-dependencies
 ```
 
 The installer never downloads NUTMerlin code or installs Entware itself. Preserve a separate router recovery path and inspect all proposed package, hook, and firewall changes before the first test.
+
+An installed administrator can apply a copied local package and adjacent sidecar with:
+
+```sh
+NUTMERLIN_ALLOW_PRODUCTION_ROUTER=1 \
+  /jffs/addons/nutmerlin/bin/nutmerlin update /local/path/nutmerlin-core-dev.tar.gz
+```
+
+Update makes no network or Entware request. It verifies the sidecar, archive inventory/types/modes, extracted manifest, current ownership, configuration, source, and network state before closing live surfaces and activating one staged code root. Success removes the one temporary backup; immediate failure restores it once.
 
 ## 8. Hardware progression
 

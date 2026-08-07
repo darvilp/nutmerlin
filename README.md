@@ -30,10 +30,11 @@ The local lifecycle-management commands are:
 nutmerlin enable
 nutmerlin disable
 nutmerlin repair
+nutmerlin update /local/path/nutmerlin-core-VERSION.tar.gz
 nutmerlin uninstall
 ```
 
-Disable retains configuration and credentials. Repair reconstructs only unambiguous owned modes, selectors, hook blocks, scheduling, and service state. Uninstall requires attributable `/opt` state, removes only verified NUTMerlin artifacts, and always retains every Entware package.
+Disable retains configuration and credentials. Repair reconstructs only unambiguous owned modes, selectors, hook blocks, scheduling, and service state. Update requires an adjacent `.sha256` sidecar, validates the fixed internal manifest, uses one immediate temporary backup, and performs no download or Entware operation. Uninstall requires attributable `/opt` state, removes only verified NUTMerlin artifacts, and always retains every Entware package.
 
 ## Deliberate exclusions
 
@@ -41,7 +42,7 @@ v0.1 has no router-side outage policy, remote shutdown executor, action journal,
 
 ## Current status
 
-The owned dummy core, Merlin lifecycle, uniquely identified USB source, exact trusted-LAN exposure, restricted secondary-client credentials, and conservative owned-only lifecycle management are implemented and covered by host-safe tests. Fetched user-initiated update, the interactive menu, and exact router/UPS evidence remain on the v0.1 track in `plan.md`. No physical-UPS claim has yet been made. This repository is development software and not a published release.
+The owned dummy core, Merlin lifecycle, uniquely identified USB source, exact trusted-LAN exposure, restricted secondary-client credentials, owned-only lifecycle management, deterministic package, and local user-initiated update are implemented and covered by host-safe tests. The interactive menu and exact router/UPS evidence remain on the v0.1 track in `plan.md`. No physical-UPS claim has yet been made. This repository is development software and not a published release.
 
 ## Development
 

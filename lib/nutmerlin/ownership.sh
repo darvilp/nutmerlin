@@ -39,19 +39,19 @@ ownership_verify_code_contents() {
 		[ "$(stat -c '%u' "$verified_code_root/$owned_code_directory")" = "$ownership_expected_uid" ] || return 1
 	done
 	ownership_entry_count_is "$verified_code_root/bin" 1 || return 1
-	ownership_entry_count_is "$verified_code_root/lib" 12 || return 1
+	ownership_entry_count_is "$verified_code_root/lib" 13 || return 1
 	ownership_entry_count_is "$verified_code_root/share" 1 || return 1
 	ownership_entry_count_is "$verified_code_root/share/dummy" 1 || return 1
 	for owned_code_file in VERSION bin/nutmerlin \
 		lib/client.sh lib/configuration.sh lib/entware.sh lib/hooks.sh lib/lifecycle.sh lib/management.sh lib/ownership.sh lib/paths.sh \
-		lib/platform.sh lib/result.sh lib/service.sh lib/status.sh \
+		lib/platform.sh lib/result.sh lib/service.sh lib/status.sh lib/update.sh \
 		share/dummy/cyberpower.dev installation.id enabled entware.tsv hooks.tsv owned-files; do
 		[ -f "$verified_code_root/$owned_code_file" ] &&
 			[ ! -L "$verified_code_root/$owned_code_file" ] || return 1
 		[ "$(stat -c '%h' "$verified_code_root/$owned_code_file")" = 1 ] || return 1
 		[ "$(stat -c '%u' "$verified_code_root/$owned_code_file")" = "$ownership_expected_uid" ] || return 1
 	done
-	[ "$(find "$verified_code_root" -type f | wc -l)" -eq 20 ] || return 1
+	[ "$(find "$verified_code_root" -type f | wc -l)" -eq 21 ] || return 1
 	case $(cat "$verified_code_root/enabled") in
 		0 | 1) ;;
 		*) return 1 ;;
@@ -73,6 +73,7 @@ lib/platform.sh
 lib/result.sh
 lib/service.sh
 lib/status.sh
+lib/update.sh
 share/dummy/cyberpower.dev' ] || return 1
 	(cd "$verified_code_root" && sha256sum -c owned-files >/dev/null 2>&1) || return 1
 }

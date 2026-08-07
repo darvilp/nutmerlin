@@ -361,6 +361,17 @@ case $command_name in
 				;;
 		esac
 		;;
+	update)
+		[ "$#" -eq 1 ] || usage
+		update_archive=$1
+		for update_library in paths entware configuration hooks platform ownership service lifecycle management update result; do
+			# shellcheck disable=SC1090
+			. "$library_dir/$update_library.sh"
+		done
+		paths_initialize
+		update_run "$update_archive"
+		result_emit update human ok success "$UPDATE_MESSAGE"
+		;;
 	enable | disable | repair | uninstall)
 		[ "$#" -eq 0 ] || usage
 		management_action=$command_name

@@ -97,34 +97,56 @@ run_docs_check() {
 run_package() {
 	require_commands
 	mkdir -p "$repository_root/dist"
+	package_stage=$(mktemp -d "${TMPDIR:-/tmp}/nutmerlin-core-stage.XXXXXX")
 	temporary_archive=$(mktemp "${TMPDIR:-/tmp}/nutmerlin-core-tar.XXXXXX")
 	temporary_package=$(mktemp "${TMPDIR:-/tmp}/nutmerlin-core.XXXXXX")
 	comparison_archive=$(mktemp "${TMPDIR:-/tmp}/nutmerlin-core-compare-tar.XXXXXX")
 	comparison_package=$(mktemp "${TMPDIR:-/tmp}/nutmerlin-core-compare.XXXXXX")
-	trap 'rm -f -- "$temporary_archive" "$temporary_package" "$comparison_archive" "$comparison_package"' EXIT HUP INT TERM
+	trap 'rm -rf -- "$package_stage"; rm -f -- "$temporary_archive" "$temporary_package" "$comparison_archive" "$comparison_package"' EXIT HUP INT TERM
+
+	mkdir -m 755 "$package_stage/bin" "$package_stage/lib" \
+		"$package_stage/lib/nutmerlin" "$package_stage/share" "$package_stage/share/dummy"
+	cp "$repository_root/LICENSE" "$repository_root/README.md" "$repository_root/VERSION" \
+		"$repository_root/install.sh" "$package_stage/"
+	cp "$repository_root/bin/nutmerlin" "$package_stage/bin/nutmerlin"
+	cp "$repository_root/lib/nutmerlin/"*.sh "$package_stage/lib/nutmerlin/"
+	cp "$repository_root/share/dummy/cyberpower.dev" \
+		"$package_stage/share/dummy/cyberpower.dev"
+	chmod 644 "$package_stage/LICENSE" "$package_stage/README.md" "$package_stage/VERSION" \
+		"$package_stage/lib/nutmerlin/"*.sh "$package_stage/share/dummy/cyberpower.dev"
+	chmod 755 "$package_stage/install.sh" "$package_stage/bin/nutmerlin"
+	(
+		cd "$package_stage"
+		sha256sum LICENSE README.md VERSION bin/nutmerlin install.sh \
+			lib/nutmerlin/*.sh share/dummy/cyberpower.dev >MANIFEST.sha256
+	)
+	chmod 644 "$package_stage/MANIFEST.sha256"
 
 	build_package() {
 		build_archive=$1
 		build_output=$2
 		(
-			cd "$repository_root"
+			cd "$package_stage"
 			tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \
-				-cf "$build_archive" LICENSE VERSION install.sh bin lib share
+				-cf "$build_archive" LICENSE MANIFEST.sha256 README.md VERSION \
+				bin install.sh lib share
 		)
 		gzip -n -c "$build_archive" >"$build_output"
 	}
 
 	build_package "$temporary_archive" "$temporary_package"
-	test -x "$repository_root/install.sh"
-	test -x "$repository_root/bin/nutmerlin"
-	test -x "$repository_root/lib/nutmerlin/result.sh"
-	test -s "$repository_root/share/dummy/cyberpower.dev"
+	test -x "$package_stage/install.sh"
+	test -x "$package_stage/bin/nutmerlin"
+	test -s "$package_stage/lib/nutmerlin/update.sh"
+	test -s "$package_stage/share/dummy/cyberpower.dev"
 	package_listing=$(tar -tzf "$temporary_package")
 	test "$package_listing" = 'LICENSE
+MANIFEST.sha256
+README.md
 VERSION
-install.sh
 bin/
 bin/nutmerlin
+install.sh
 lib/
 lib/nutmerlin/
 lib/nutmerlin/client.sh
@@ -139,6 +161,7 @@ lib/nutmerlin/platform.sh
 lib/nutmerlin/result.sh
 lib/nutmerlin/service.sh
 lib/nutmerlin/status.sh
+lib/nutmerlin/update.sh
 share/
 share/dummy/
 share/dummy/cyberpower.dev'
@@ -148,7 +171,12 @@ share/dummy/cyberpower.dev'
 		return 1
 	fi
 	mv -- "$temporary_package" "$repository_root/dist/nutmerlin-core-dev.tar.gz"
+	package_digest=$(sha256sum "$repository_root/dist/nutmerlin-core-dev.tar.gz" |
+		awk '{ print $1 }')
+	printf '%s  %s\n' "$package_digest" nutmerlin-core-dev.tar.gz \
+		>"$repository_root/dist/nutmerlin-core-dev.tar.gz.sha256"
 	rm -f -- "$temporary_archive" "$comparison_archive" "$comparison_package"
+	rm -rf -- "$package_stage"
 	trap - EXIT HUP INT TERM
 }
 

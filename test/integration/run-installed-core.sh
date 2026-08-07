@@ -236,6 +236,12 @@ if [ "$test_scenario" = management ]; then
 	[ -f "$installed_root/platform/cru.tsv" ]
 	[ "$(stat -c '%a' "$installed_root/jffs/addons/nutmerlin/lib/status.sh")" = 644 ]
 	"$installed_root/opt/bin/upsc" dummy@127.0.0.1 ups.status 2>/dev/null | grep -qx OL
+	make --no-print-directory -C "$repository_root" package >/dev/null
+	invoke_cli update "$repository_root/dist/nutmerlin-core-dev.tar.gz" \
+		>"$installed_root/update.log"
+	grep -Fx 'update: ok: NUTMerlin updated to 0.1.0-dev; dummy is running on loopback' \
+		"$installed_root/update.log" >/dev/null
+	"$installed_root/opt/bin/upsc" dummy@127.0.0.1 ups.status 2>/dev/null | grep -qx OL
 	invoke_cli uninstall >"$installed_root/uninstall.log"
 	[ ! -e "$installed_root/jffs/addons/nutmerlin" ]
 	[ ! -e "$installed_root/opt/etc/nutmerlin" ]
@@ -244,7 +250,7 @@ if [ "$test_scenario" = management ]; then
 	if ss -ltn | awk 'NR > 1 { print $4 }' | grep -Eq '(^|:)3493$'; then
 		exit 1
 	fi
-	printf '%s\n' 'management lifecycle: disable=closed enable=running repair=running uninstall=owned-only'
+	printf '%s\n' 'management lifecycle: disable=closed enable=running repair=running update=running uninstall=owned-only'
 	exit 0
 fi
 

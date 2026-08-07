@@ -53,7 +53,7 @@ Close live surfaces, restore only attributable artifacts, and remove owned code/
 
 ### #21 — Package and update
 
-Build a deterministic core archive and implement fetched, user-initiated update with one immediate backup and smoke recovery.
+Build a deterministic core archive and implement local user-initiated update with one immediate backup and smoke recovery. No downloader or automatic check is part of v0.1.
 
 ### Menu — Interactive AMTM-style management
 

@@ -100,6 +100,14 @@ teardown() {
 	[ "$status" -eq 1 ]
 }
 
+@test "local update has no downloader or package-manager path" {
+	run rg -n \
+		'curl|wget|ftp:|https?:|opkg|apk[[:space:]]|apt[[:space:]]|dnf[[:space:]]|yum[[:space:]]' \
+		"$REPOSITORY_ROOT/lib/nutmerlin/update.sh"
+
+	[ "$status" -eq 1 ]
+}
+
 @test "listener probes fail closed when socket state cannot be inspected" {
 	empty_path=$NUTMERLIN_TEST_ROOT/empty-path
 	mkdir "$empty_path"
