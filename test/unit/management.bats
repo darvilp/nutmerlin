@@ -107,6 +107,20 @@ prepare_owned_lan_admission() {
 	[ "$output" = 'disable: ok: NUTMerlin is disabled; owned data and Entware packages were retained' ]
 }
 
+@test "services-start preserves disabled state with available or missing Entware storage" {
+	invoke_cli disable
+	[ "$status" -eq 0 ]
+	for storage in available missing; do
+		NUTMERLIN_TEST_STORAGE_STATE=$storage
+		invoke_cli hook services-start
+		[ "$status" -eq 69 ]
+		[ "$(cat "$code_root/enabled")" = 0 ]
+		[ ! -e "$NUTMERLIN_TEST_ROOT/platform/cru.tsv" ]
+		[ ! -e "$NUTMERLIN_TMP_ROOT/nutmerlin/run/upsd.pid" ]
+		[ ! -e "$NUTMERLIN_TMP_ROOT/nutmerlin/run/dummy-ups.pid" ]
+	done
+}
+
 @test "disable closes attributable LAN state when Entware storage is missing" {
 	prepare_owned_lan_admission
 	[ -e "$NUTMERLIN_TEST_ROOT/platform/firewall.tsv" ]
@@ -161,6 +175,26 @@ prepare_owned_lan_admission() {
 		[ ! -e "$NUTMERLIN_TEST_ROOT/platform/cru.tsv" ]
 		unset NUTMERLIN_TEST_MANAGEMENT_FAIL_AFTER
 	done
+}
+
+@test "service start refuses incompatible Entware before launching the driver" {
+	cat >"$NUTMERLIN_OPT_ROOT/lib/nut/dummy-ups" <<'DRIVER'
+#!/bin/sh
+if [ "$1" = -h ]; then
+	printf '%s\n' 'usage: dummy-ups -a ID'
+	exit 0
+fi
+: >"$NUTMERLIN_TEST_ROOT/driver-was-started"
+exit 1
+DRIVER
+
+	invoke_cli service start
+	[ "$status" -eq 78 ]
+	[[ "$output" == *'dummy-ups lacks required options'* ]]
+	[ ! -e "$NUTMERLIN_TEST_ROOT/driver-was-started" ]
+	[ ! -e "$NUTMERLIN_TMP_ROOT/nutmerlin/run/dummy-ups.pid" ]
+	[ ! -e "$NUTMERLIN_TMP_ROOT/nutmerlin/run/upsd.pid" ]
+	[ ! -e "$NUTMERLIN_TEST_ROOT/platform/firewall.tsv" ]
 }
 
 @test "enable revalidates the selected source before changing disabled state" {

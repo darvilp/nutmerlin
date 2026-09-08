@@ -90,6 +90,10 @@ platform_usb_snapshot() {
 		esac
 		platform_usb_vendor=$(printf '%s\n' "$platform_usb_vendor" | tr 'A-F' 'a-f')
 		platform_usb_product=$(printf '%s\n' "$platform_usb_product" | tr 'A-F' 'a-f')
+		# Unrelated USB devices need not satisfy the closed UPS identity grammar.
+		if [ "$platform_usb_vendor" != "$1" ] || [ "$platform_usb_product" != "$2" ]; then
+			continue
+		fi
 		platform_usb_serial=-
 		if [ -f "$platform_usb_device_root/serial" ] && [ ! -L "$platform_usb_device_root/serial" ]; then
 			platform_usb_serial=$(cat "$platform_usb_device_root/serial")

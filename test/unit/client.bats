@@ -96,6 +96,29 @@ teardown() {
 	[ "$(find "$config_root/sets" -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 1 ]
 }
 
+@test "client revoke honors the requested ID when current and last-good contain different clients" {
+	printf '%s\n' 0 >"$NUTMERLIN_JFFS_ROOT/addons/nutmerlin/enabled"
+	invoke_cli client add nas-primary --json
+	[ "$status" -eq 0 ]
+	first_id=$(printf '%s\n' "$output" | jq -r '.details.client_id')
+	invoke_cli client add workstation --json
+	[ "$status" -eq 0 ]
+	second_id=$(printf '%s\n' "$output" | jq -r '.details.client_id')
+
+	config_root=$NUTMERLIN_OPT_ROOT/etc/nutmerlin/config
+	previous_set=$(cat "$config_root/current")
+	invoke_cli client revoke 00000000000000000000000000000000
+	[ "$status" -eq 69 ]
+	[ "$(cat "$config_root/current")" = "$previous_set" ]
+
+	invoke_cli client revoke "$second_id"
+	[ "$status" -eq 0 ]
+	set_root=$config_root/sets/$(cat "$config_root/current")
+	[ -f "$set_root/clients/$first_id" ]
+	[ ! -e "$set_root/clients/$second_id" ]
+	[ ! -e "$config_root/last-good" ]
+}
+
 @test "failed service activation keeps a revoked credential absent and the service stopped" {
 	printf '%s\n' 0 >"$NUTMERLIN_JFFS_ROOT/addons/nutmerlin/enabled"
 	invoke_cli client add nas-primary --json
@@ -135,6 +158,9 @@ teardown() {
 	[ "$first_id" != "$second_id" ]
 	[ "$first_username" != "$second_username" ]
 	[ "$first_secret" != "$second_secret" ]
+	set_root=$NUTMERLIN_OPT_ROOT/etc/nutmerlin/config/sets/$(cat "$NUTMERLIN_OPT_ROOT/etc/nutmerlin/config/current")
+	grep -Fx $'label\tnas-primary' "$set_root/clients/$first_id"
+	grep -Fx $'label\tworkstation' "$set_root/clients/$second_id"
 
 	invoke_cli status --json
 	[ "$status" -eq 69 ]

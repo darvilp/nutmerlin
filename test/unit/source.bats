@@ -152,6 +152,41 @@ teardown() {
 	[ "$output" = 'source: ok: active source is ups; vendor_id=0764 product_id=0501 identity=busport value=003' ]
 }
 
+@test "unrelated USB serials do not prevent selecting the exact configured UPS" {
+	printf '%s\n' 0 >"$NUTMERLIN_JFFS_ROOT/addons/nutmerlin/enabled"
+	usb_sysfs_root=$NUTMERLIN_TEST_ROOT/platform/sysfs-usb
+	mkdir -p "$usb_sysfs_root/1-3" "$usb_sysfs_root/1-4"
+	printf '%s\n' 0764 >"$usb_sysfs_root/1-3/idVendor"
+	printf '%s\n' 0501 >"$usb_sysfs_root/1-3/idProduct"
+	printf '%s\n' CPS123456 >"$usb_sysfs_root/1-3/serial"
+	printf '%s\n' 0781 >"$usb_sysfs_root/1-4/idVendor"
+	printf '%s\n' 5581 >"$usb_sysfs_root/1-4/idProduct"
+	printf '%s\n' 'USB Flash Drive' >"$usb_sysfs_root/1-4/serial"
+
+	run env NUTMERLIN_ENABLE_TEST_ADAPTERS=1 \
+		NUTMERLIN_TEST_ROOT="$NUTMERLIN_TEST_ROOT" \
+		NUTMERLIN_TEST_USB_SYSFS_ROOT="$usb_sysfs_root" \
+		NUTMERLIN_TEST_RUN_USER="$(id -un)" \
+		"$installed_cli" source configure-usbhid \
+		--vendor-id 0764 --product-id 0501 --serial CPS123456
+	[ "$status" -eq 0 ]
+	config_root=$NUTMERLIN_OPT_ROOT/etc/nutmerlin/config
+	selected_set=$(cat "$config_root/current")
+	grep -Fx $'identity_value\tCPS123456' "$config_root/sets/$selected_set/model.tsv"
+
+	# An invalid serial on a compatible device must still refuse selection.
+	printf '%s\n' 0764 >"$usb_sysfs_root/1-4/idVendor"
+	printf '%s\n' 0501 >"$usb_sysfs_root/1-4/idProduct"
+	run env NUTMERLIN_ENABLE_TEST_ADAPTERS=1 \
+		NUTMERLIN_TEST_ROOT="$NUTMERLIN_TEST_ROOT" \
+		NUTMERLIN_TEST_USB_SYSFS_ROOT="$usb_sysfs_root" \
+		NUTMERLIN_TEST_RUN_USER="$(id -un)" \
+		"$installed_cli" source configure-usbhid \
+		--vendor-id 0764 --product-id 0501 --serial CPS123456
+	[ "$status" -eq 78 ]
+	[ "$(cat "$config_root/current")" = "$selected_set" ]
+}
+
 @test "configure-usbhid leaves a changed serial unavailable without changing current" {
 	config_root=$NUTMERLIN_OPT_ROOT/etc/nutmerlin/config
 	current_before=$(cat "$config_root/current")

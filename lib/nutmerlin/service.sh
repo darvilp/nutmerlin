@@ -456,8 +456,8 @@ service_cleanup_failed_start() {
 }
 
 service_start() {
-	entware_check
-	service_resolve_current
+	entware_check || return $?
+	service_resolve_current || return $?
 	service_load_active_profile || {
 		printf '%s\n' 'service refused: active source profile is invalid' >&2
 		return 78

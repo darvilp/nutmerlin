@@ -178,7 +178,11 @@ lifecycle_hook() {
 	fi
 	case $hook_event in
 		services-start)
-			platform_cru_ensure || return $?
+			if [ "$(cat "$NUTMERLIN_JFFS_ROOT/addons/nutmerlin/enabled")" = 1 ]; then
+				platform_cru_ensure || return $?
+			else
+				platform_cru_remove || return $?
+			fi
 			lifecycle_reconcile
 			;;
 		post-mount | firewall-start | reconcile)

@@ -161,17 +161,15 @@ configuration_network_cidr() {
 }
 
 configuration_client_id_is_valid() {
-	client_id=$1
-	[ "${#client_id}" -eq 32 ] || return 1
-	case $client_id in
+	[ "${#1}" -eq 32 ] || return 1
+	case $1 in
 		*[!0-9a-f]*) return 1 ;;
 	esac
 }
 
 configuration_client_label_is_valid() {
-	client_label=$1
-	[ -n "$client_label" ] && [ "${#client_label}" -le 64 ] || return 1
-	case $client_label in
+	[ -n "$1" ] && [ "${#1}" -le 64 ] || return 1
+	case $1 in
 		' '* | *' ' | *[!A-Za-z0-9._+\ -]*) return 1 ;;
 	esac
 }
@@ -618,7 +616,7 @@ configuration_resolve_usb_identity() (
 	resolve_identity_value=$4
 	resolve_snapshot=$(mktemp "$NUTMERLIN_TMP_ROOT/.nutmerlin-usb-snapshot.XXXXXX") || return 75
 	trap 'rm -f -- "$resolve_snapshot"' EXIT HUP INT TERM
-	platform_usb_snapshot >"$resolve_snapshot" || {
+	platform_usb_snapshot "$resolve_vendor_id" "$resolve_product_id" >"$resolve_snapshot" || {
 		resolve_status=$?
 		printf '%s\n' 'source unavailable: USB discovery could not be read safely' >&2
 		rm -f -- "$resolve_snapshot"
